@@ -1,1 +1,1 @@
-mod automaton;
+pub mod automaton;
