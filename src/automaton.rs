@@ -457,9 +457,14 @@ impl Nfst {
                     .iter()
                     .flat_map(|s| {
                         self.transitions
-                            .iter()
-                            .filter(|t| t.from_state == *s && t.to_char == Some(ch.clone()))
+                            .outgoing_edges(*s)
+                            .into_iter()
+                            .filter(|t| t.to_char == Some(ch.clone()))
                             .map(|t| t.to_state)
+                        // self.transitions
+                        //     .iter()
+                        //     .filter(|t| t.from_state == *s && t.to_char == Some(ch.clone()))
+                        //     .map(|t| t.to_state)
                     })
                     .collect();
                 let resulting_state: im::HashSet<usize> =

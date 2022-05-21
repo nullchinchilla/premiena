@@ -23,10 +23,14 @@ impl Alphabet {
 
     /// One character of the alphabet, as a relation.
     pub fn id_sigma(&self) -> Nfst {
-        self.sigma
-            .iter()
-            .cloned()
-            .fold(Nfst::nothing(), |a, b| a.union(&Nfst::id_single(Some(b))))
+        Nfst::id_dfa(
+            &self
+                .sigma
+                .iter()
+                .cloned()
+                .fold(Nfst::nothing(), |a, b| a.union(&Nfst::id_single(Some(b))))
+                .image_dfa(),
+        )
     }
 
     /// Freely introduce elements of the given set
@@ -112,6 +116,12 @@ mod tests {
     }
 
     #[test]
+    fn big_sigma() {
+        let alphabet = Alphabet::new("abcdefghijklmnopqrstuvwxyz".chars().map(chconv));
+        eprintln!("{}", alphabet.id_sigma().graphviz());
+    }
+
+    #[test]
     fn complement() {
         let alphabet = Alphabet::new("gtac".chars().map(chconv));
         let test = Nfst::id_single(Some(chconv('g')))
@@ -126,8 +136,9 @@ mod tests {
         let input = "tapaktapka".chars().fold(Nfst::id_single(None), |a, b| {
             a.concat(&Nfst::id_single(Some(chconv(b))))
         });
-        let alphabet = Alphabet::new("aptkh".chars().map(chconv));
-        let alphabet_with_brackets = Alphabet::new("aptkh<>".chars().map(chconv));
+        let alphabet = Alphabet::new("abcdefghijklmnopqrstuvwxyz".chars().map(chconv));
+        let alphabet_with_brackets =
+            Alphabet::new("abcdefghijklmnopqrstuvwxyz<>".chars().map(chconv));
 
         let prologue = alphabet.intro(
             &Alphabet::new(['<', '>'].into_iter().map(chconv))
@@ -162,8 +173,6 @@ mod tests {
                 )
                 .star();
 
-        let dfa = Nfst::id_dfa(&left_context);
-        eprintln!("made left context");
         let transducer = prologue
             .compose(&Nfst::id_dfa(&right_context))
             .compose(&replace)
@@ -171,7 +180,7 @@ mod tests {
             .compose(&prologue.inverse());
 
         eprintln!("made transducer");
-        let result = input.compose(&transducer).image_dfa().minimize();
+        let result = input.compose(&transducer).image_dfa();
         eprintln!("made result");
         // eprintln!("{}", replace.graphviz());
 
