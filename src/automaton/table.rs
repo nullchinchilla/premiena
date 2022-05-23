@@ -1,12 +1,13 @@
-use smol_str::SmolStr;
 use tap::Tap;
+
+use super::Symbol;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Transition {
     pub from_state: usize,
     pub to_state: usize,
-    pub from_char: Option<SmolStr>,
-    pub to_char: Option<SmolStr>,
+    pub from_char: Option<Symbol>,
+    pub to_char: Option<Symbol>,
 }
 
 /// A persistent/copy-on-write NFST transition table with good asymptotic performance, supporting multiple kinds of queries.
@@ -14,10 +15,9 @@ pub struct Transition {
 #[derive(Clone)]
 pub struct Table {
     // state -> (char -> setof outchar, state)
-    forwards:
-        im::HashMap<usize, im::HashMap<Option<SmolStr>, im::HashSet<(Option<SmolStr>, usize)>>>,
+    forwards: im::HashMap<usize, im::HashMap<Option<Symbol>, im::HashSet<(Option<Symbol>, usize)>>>,
     backwards:
-        im::HashMap<usize, im::HashMap<Option<SmolStr>, im::HashSet<(Option<SmolStr>, usize)>>>,
+        im::HashMap<usize, im::HashMap<Option<Symbol>, im::HashSet<(Option<Symbol>, usize)>>>,
 }
 
 impl Table {
@@ -68,24 +68,24 @@ impl Table {
         self.forwards
             .entry(transition.from_state)
             .or_default()
-            .entry(transition.from_char.clone())
+            .entry(transition.from_char)
             .or_default()
-            .insert((transition.to_char.clone(), transition.to_state));
+            .insert((transition.to_char, transition.to_state));
         self.backwards
             .entry(transition.to_state)
             .or_default()
-            .entry(transition.to_char.clone())
+            .entry(transition.to_char)
             .or_default()
-            .insert((transition.from_char.clone(), transition.from_state));
+            .insert((transition.from_char, transition.from_state));
     }
 
     /// The basic transition function.
     pub fn transition(
         &self,
         state: usize,
-        input: impl Into<Option<SmolStr>>,
-    ) -> im::HashSet<(Option<SmolStr>, usize)> {
-        let input: Option<SmolStr> = input.into();
+        input: impl Into<Option<Symbol>>,
+    ) -> im::HashSet<(Option<Symbol>, usize)> {
+        let input: Option<Symbol> = input.into();
         let mut res = if let Some(val) = self.forwards.get(&state) {
             if let Some(val) = val.get(&input) {
                 val.clone()
@@ -109,8 +109,8 @@ impl Table {
                     p.1.iter().map(|q| Transition {
                         from_state: state,
                         to_state: q.1,
-                        from_char: p.0.clone(),
-                        to_char: q.0.clone(),
+                        from_char: *p.0,
+                        to_char: q.0,
                     })
                 })
                 .collect()
@@ -127,8 +127,8 @@ impl Table {
                     p.1.iter().map(|q| Transition {
                         to_state: state,
                         from_state: q.1,
-                        to_char: p.0.clone(),
-                        from_char: q.0.clone(),
+                        to_char: *p.0,
+                        from_char: q.0,
                     })
                 })
                 .collect()
@@ -141,17 +141,16 @@ impl Table {
     pub fn iter(&self) -> impl Iterator<Item = Transition> + '_ {
         self.forwards
             .iter()
-            .map(|(state, tab)| {
+            .flat_map(|(state, tab)| {
                 tab.iter().map(|(ch, nstate)| {
                     nstate.iter().map(|(nch, nstate)| Transition {
                         from_state: *state,
                         to_state: *nstate,
-                        from_char: ch.clone(),
-                        to_char: nch.clone(),
+                        from_char: *ch,
+                        to_char: *nch,
                     })
                 })
             })
-            .flatten()
             .flatten()
     }
 

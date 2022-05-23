@@ -1,23 +1,21 @@
-use smol_str::SmolStr;
-
-use crate::automaton::{Dfa, Nfst};
+use crate::automaton::{Dfa, Nfst, Symbol};
 
 /// Alphabet encapsulates an alphabet within a particular segment type.
 #[derive(Clone, Debug)]
 pub struct Alphabet {
-    sigma: im::HashSet<SmolStr>,
+    sigma: im::HashSet<Symbol>,
 }
 
 impl Alphabet {
     /// Create a new alphabet struct.
-    pub fn new(segments: impl IntoIterator<Item = SmolStr>) -> Self {
+    pub fn new(segments: impl IntoIterator<Item = Symbol>) -> Self {
         Self {
             sigma: segments.into_iter().collect(),
         }
     }
 
     /// The alphabet itself.
-    pub fn sigma(&self) -> &im::HashSet<SmolStr> {
+    pub fn sigma(&self) -> &im::HashSet<Symbol> {
         &self.sigma
     }
 
@@ -110,21 +108,16 @@ fn right_context(alphabet: &Alphabet, rho: &Dfa, left: &Dfa, right: &Dfa) -> Dfa
 mod tests {
     use super::*;
 
-    fn chconv(c: char) -> SmolStr {
-        // better way
-        std::iter::once(c).collect()
-    }
-
     #[test]
     fn big_sigma() {
-        let alphabet = Alphabet::new("abcdefghijklmnopqrstuvwxyz".chars().map(chconv));
+        let alphabet = Alphabet::new("abcdefghijklmnopqrstuvwxyz".chars().map(Symbol::from));
         eprintln!("{}", alphabet.id_sigma().graphviz());
     }
 
     #[test]
     fn complement() {
-        let alphabet = Alphabet::new("gtac".chars().map(chconv));
-        let test = Nfst::id_single(Some(chconv('g')))
+        let alphabet = Alphabet::new("gtac".chars().map(Symbol::from));
+        let test = Nfst::id_single(Some(Symbol::from('g')))
             .star()
             .image_dfa()
             .complement(alphabet.sigma());
@@ -134,41 +127,41 @@ mod tests {
     #[test]
     fn fullhog() {
         let input = "tapaktapka".chars().fold(Nfst::id_single(None), |a, b| {
-            a.concat(&Nfst::id_single(Some(chconv(b))))
+            a.concat(&Nfst::id_single(Some(Symbol::from(b))))
         });
-        let alphabet = Alphabet::new("abcdefghijklmnopqrstuvwxyz".chars().map(chconv));
+        let alphabet = Alphabet::new("abcdefghijklmnopqrstuvwxyz".chars().map(Symbol::from));
         let alphabet_with_brackets =
-            Alphabet::new("abcdefghijklmnopqrstuvwxyz<>".chars().map(chconv));
+            Alphabet::new("abcdefghijklmnopqrstuvwxyz<>".chars().map(Symbol::from));
 
         let prologue = alphabet.intro(
-            &Alphabet::new(['<', '>'].into_iter().map(chconv))
+            &Alphabet::new(['<', '>'].into_iter().map(Symbol::from))
                 .id_sigma()
                 .image_dfa(),
         );
-        let left_pattern = Nfst::id_single(Some(chconv('a')));
-        let right_pattern = Nfst::id_single(Some(chconv('t')));
-        let pre_change = Nfst::id_single(Some(chconv('k')));
-        let post_change = Nfst::id_single(Some(chconv('h')));
+        let left_pattern = Nfst::id_single(Some(Symbol::from('a')));
+        let right_pattern = Nfst::id_single(Some(Symbol::from('t')));
+        let pre_change = Nfst::id_single(Some(Symbol::from('k')));
+        let post_change = Nfst::id_single(Some(Symbol::from('h')));
 
         let left_context = left_context(
             &alphabet_with_brackets,
             &left_pattern.image_dfa(),
-            &Nfst::id_single(Some(chconv('<'))).image_dfa(),
-            &Nfst::id_single(Some(chconv('>'))).image_dfa(),
+            &Nfst::id_single(Some(Symbol::from('<'))).image_dfa(),
+            &Nfst::id_single(Some(Symbol::from('>'))).image_dfa(),
         );
         let right_context = right_context(
             &alphabet_with_brackets,
             &right_pattern.image_dfa(),
-            &Nfst::id_single(Some(chconv('<'))).image_dfa(),
-            &Nfst::id_single(Some(chconv('>'))).image_dfa(),
+            &Nfst::id_single(Some(Symbol::from('<'))).image_dfa(),
+            &Nfst::id_single(Some(Symbol::from('>'))).image_dfa(),
         );
-        let emm = Alphabet::new(['<', '>'].into_iter().map(chconv)).id_sigma();
+        let emm = Alphabet::new(['<', '>'].into_iter().map(Symbol::from)).id_sigma();
         let replace =
             Nfst::id_dfa(&alphabet.ignore(&alphabet.id_sigma().image_dfa(), &emm.image_dfa()))
                 .concat(
-                    &Nfst::id_single(Some(chconv('<')))
+                    &Nfst::id_single(Some(Symbol::from('<')))
                         .concat(&pre_change.image_cross(&post_change))
-                        .concat(&Nfst::id_single(Some(chconv('>'))))
+                        .concat(&Nfst::id_single(Some(Symbol::from('>'))))
                         .optional(),
                 )
                 .star();

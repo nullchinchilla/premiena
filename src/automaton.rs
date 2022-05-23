@@ -1,12 +1,87 @@
 mod table;
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
+    fmt::Display,
+    num::NonZeroU64,
+};
 
 use genawaiter::sync::Gen;
-use smol_str::SmolStr;
 use tap::Tap;
 
 use self::table::{Table, Transition};
+
+/// An opaque symbol, normally representing a Unicode codepoint, but perhaps other things too.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Symbol(NonZeroU64);
+
+impl From<char> for Symbol {
+    fn from(c: char) -> Self {
+        let u: u64 = c.into();
+        Symbol(NonZeroU64::new(u + 1).unwrap())
+    }
+}
+
+impl Display for Symbol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ch = {
+            let u: u64 = self.0.into();
+            char::from_u32((u - 1) as u32)
+        };
+        if let Some(ch) = ch {
+            ch.fmt(f)
+        } else {
+            let u: u64 = self.0.into();
+            format!("{:#x}", u - 1).fmt(f)
+        }
+    }
+}
+
+impl Symbol {
+    fn invalid() -> Self {
+        Self(NonZeroU64::new(u64::MAX).unwrap())
+    }
+
+    /// Create a symbol from two other symbols
+    pub fn from_pair(i: Self, j: Self) -> Self {
+        // bit-interleaving
+        let mut ret = 0u64;
+        let mut i: u64 = i.0.into();
+        let mut j: u64 = j.0.into();
+        for ctr in 0..64 {
+            ret <<= 1;
+            if ctr % 2 == 0 {
+                ret |= i & 1;
+                i >>= 1;
+            } else {
+                ret |= j & 1;
+                j >>= 1;
+            }
+        }
+        Self(ret.reverse_bits().try_into().unwrap())
+    }
+
+    /// Decodes as pair
+    pub fn decode_as_pair(self) -> (Self, Self) {
+        let mut this: u64 = self.0.into();
+        let mut i = 0u64;
+        let mut j = 0u64;
+        for ctr in 0..126 {
+            if ctr % 2 == 0 {
+                i |= this & 1;
+                i <<= 1;
+            } else {
+                j |= this & 1;
+                j <<= 1;
+            }
+            this >>= 1;
+        }
+        (
+            Self(i.reverse_bits().try_into().unwrap()),
+            Self(j.reverse_bits().try_into().unwrap()),
+        )
+    }
+}
 
 /// A nondeterministic finite-state transducer.
 #[derive(Clone)]
@@ -27,13 +102,13 @@ impl Nfst {
     }
 
     /// Creates a new automaton that id-matches either epsilon or a single symbol.
-    pub fn id_single(symb: Option<SmolStr>) -> Self {
+    pub fn id_single(symb: Option<Symbol>) -> Self {
         Self {
             start_idx: 0,
             transitions: std::iter::once(Transition {
                 from_state: 0,
                 to_state: 1,
-                from_char: symb.clone(),
+                from_char: symb,
                 to_char: symb,
             })
             .collect(),
@@ -49,8 +124,8 @@ impl Nfst {
                 .table
                 .iter()
                 .map(|trans| Transition {
-                    from_char: trans.from_char.clone(),
-                    to_char: trans.from_char.clone(),
+                    from_char: trans.from_char,
+                    to_char: trans.from_char,
                     from_state: trans.from_state,
                     to_state: trans.to_state,
                 })
@@ -199,7 +274,7 @@ impl Nfst {
     pub fn image_cross(&self, other: &Self) -> Self {
         let mut ab2c = new_ab2c();
         let mut transitions = Table::new();
-        let alphabet: BTreeSet<Option<SmolStr>> = self
+        let alphabet: BTreeSet<Option<Symbol>> = self
             .alphabet()
             .into_iter()
             .chain(other.alphabet().into_iter())
@@ -210,15 +285,15 @@ impl Nfst {
             for y in other.transitions.states() {
                 for a in alphabet.iter() {
                     for b in alphabet.iter() {
-                        let x_tsns = self.transitions.transition(x, a.clone());
-                        let y_tsns = other.transitions.transition(y, b.clone());
+                        let x_tsns = self.transitions.transition(x, *a);
+                        let y_tsns = other.transitions.transition(y, *b);
                         for x_tsn in x_tsns {
                             for y_tsn in y_tsns.clone() {
                                 transitions.insert(Transition {
                                     from_state: ab2c(x, y),
                                     to_state: ab2c(x_tsn.1, y_tsn.1),
-                                    from_char: a.clone(),
-                                    to_char: b.clone(),
+                                    from_char: *a,
+                                    to_char: *b,
                                 });
                             }
                         }
@@ -249,13 +324,14 @@ impl Nfst {
                 .transitions
                 .iter()
                 .map(|t| {
-                    let n: SmolStr = serde_json::to_string(&(t.from_char, t.to_char))
-                        .unwrap()
-                        .into();
+                    let n: Symbol = Symbol::from_pair(
+                        t.from_char.unwrap_or_else(Symbol::invalid),
+                        t.to_char.unwrap_or_else(Symbol::invalid),
+                    );
                     Transition {
                         from_state: t.from_state,
                         to_state: t.to_state,
-                        from_char: Some(n.clone()),
+                        from_char: Some(n),
                         to_char: Some(n),
                     }
                 })
@@ -272,15 +348,23 @@ impl Nfst {
             transitions: paths
                 .table
                 .iter()
-                .filter_map(|trans| {
-                    let (from_char, to_char): (Option<SmolStr>, Option<SmolStr>) =
-                        serde_json::from_str(&trans.from_char?).ok()?;
-                    Some(Transition {
-                        from_char,
-                        to_char,
+                .map(|trans| {
+                    let (from_char, to_char): (Symbol, Symbol) =
+                        trans.from_char.unwrap().decode_as_pair();
+                    Transition {
+                        from_char: if from_char == Symbol::invalid() {
+                            None
+                        } else {
+                            Some(from_char)
+                        },
+                        to_char: if to_char == Symbol::invalid() {
+                            None
+                        } else {
+                            Some(to_char)
+                        },
                         from_state: trans.from_state,
                         to_state: trans.to_state,
-                    })
+                    }
                 })
                 .collect(),
             accepting: paths.accepting.clone(),
@@ -355,7 +439,7 @@ impl Nfst {
                 continue;
             }
             // eprintln!("going through ({},{})", i, j);
-            let chars: BTreeSet<Option<SmolStr>> = self
+            let chars: BTreeSet<Option<Symbol>> = self
                 .transitions
                 .outgoing_edges(i)
                 .into_iter()
@@ -367,18 +451,18 @@ impl Nfst {
                     from_state: ab2c(i, j),
                     to_state: ab2c(i, second_stage.1),
                     from_char: None,
-                    to_char: second_stage.0.clone(),
+                    to_char: second_stage.0,
                 });
                 dfs_stack.push((i, second_stage.1));
             }
             for ch in chars {
-                for first_stage in self.transitions.transition(i, ch.clone()) {
-                    for second_stage in other.transitions.transition(j, first_stage.0.clone()) {
+                for first_stage in self.transitions.transition(i, ch) {
+                    for second_stage in other.transitions.transition(j, first_stage.0) {
                         new_transitions.insert(Transition {
                             from_state: ab2c(i, j),
                             to_state: ab2c(first_stage.1, second_stage.1),
-                            from_char: ch.clone(),
-                            to_char: second_stage.0.clone(),
+                            from_char: ch,
+                            to_char: second_stage.0,
                         });
                         dfs_stack.push((first_stage.1, second_stage.1));
                     }
@@ -387,7 +471,7 @@ impl Nfst {
                         new_transitions.insert(Transition {
                             from_state: ab2c(i, j),
                             to_state: ab2c(first_stage.1, j),
-                            from_char: ch.clone(),
+                            from_char: ch,
                             to_char: None,
                         });
                         dfs_stack.push((first_stage.1, j));
@@ -459,7 +543,7 @@ impl Nfst {
                         self.transitions
                             .outgoing_edges(*s)
                             .into_iter()
-                            .filter(|t| t.to_char == Some(ch.clone()))
+                            .filter(|t| t.to_char == Some(ch))
                             .map(|t| t.to_state)
                         // self.transitions
                         //     .iter()
@@ -474,7 +558,7 @@ impl Nfst {
                 dfa_table.insert(Transition {
                     from_state: dfa_num,
                     to_state: set_to_num(resulting_state.iter().copied().collect()),
-                    from_char: Some(ch.clone()),
+                    from_char: Some(ch),
                     to_char: None,
                 });
                 search_queue.push(resulting_state);
@@ -564,14 +648,14 @@ impl Nfst {
                     next_transitions.insert(Transition {
                         from_state: transition.from_state,
                         to_state: new_stateno,
-                        from_char: transition.from_char.clone(),
+                        from_char: transition.from_char,
                         to_char: None,
                     });
                     next_transitions.insert(Transition {
                         from_state: new_stateno,
                         to_state: transition.to_state,
                         from_char: None,
-                        to_char: transition.to_char.clone(),
+                        to_char: transition.to_char,
                     });
                 } else {
                     next_transitions.insert(transition.clone());
@@ -591,7 +675,7 @@ impl Nfst {
                         next_transitions.insert(Transition {
                             from_state: incoming.from_state,
                             to_state: outgoing.to_state,
-                            to_char: incoming.to_char.clone(),
+                            to_char: incoming.to_char,
                             from_char: outgoing.from_char,
                         });
                     }
@@ -632,7 +716,7 @@ impl Nfst {
         toret
     }
 
-    fn alphabet(&self) -> BTreeSet<SmolStr> {
+    fn alphabet(&self) -> BTreeSet<Symbol> {
         self.transitions
             .iter()
             .flat_map(|d| [d.from_char, d.to_char].into_iter())
@@ -683,7 +767,7 @@ impl Dfa {
                     new_table.insert(Transition {
                         from_state: ab2c(atrans.from_state, btrans.from_state),
                         to_state: ab2c(atrans.to_state, btrans.to_state),
-                        from_char: atrans.from_char.clone(),
+                        from_char: atrans.from_char,
                         to_char: None,
                     })
                 }
@@ -711,7 +795,7 @@ impl Dfa {
     }
 
     /// Complement of this DFA.
-    pub fn complement(&self, alphabet: &im::HashSet<SmolStr>) -> Self {
+    pub fn complement(&self, alphabet: &im::HashSet<Symbol>) -> Self {
         let mut new = self.clone();
         // first, we make sure that every state has every possible output from it in the alphabet
         let junk_state = new.table.next_free_stateid();
@@ -722,11 +806,11 @@ impl Dfa {
             .chain(std::iter::once(junk_state))
         {
             for ch in alphabet.iter() {
-                if new.table.transition(state, Some(ch.clone())).is_empty() {
+                if new.table.transition(state, Some(*ch)).is_empty() {
                     new.table.insert(Transition {
                         from_state: state,
                         to_state: junk_state,
-                        from_char: ch.clone().into(),
+                        from_char: (*ch).into(),
                         to_char: None,
                     });
                 }
@@ -752,7 +836,7 @@ impl Dfa {
     }
 
     /// Iterates through the regular language described by this DFA.
-    pub fn iter(&self) -> impl Iterator<Item = Vec<SmolStr>> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = Vec<Symbol>> + '_ {
         let mut bfs_queue = VecDeque::new();
         bfs_queue.push_back((self.start, vec![]));
         let generator = Gen::new(|co| async move {
@@ -785,7 +869,7 @@ impl Dfa {
             .map(|trans| Transition {
                 from_state: trans.to_state,
                 to_state: trans.from_state,
-                from_char: trans.from_char.clone(),
+                from_char: trans.from_char,
                 to_char: trans.from_char,
             })
             .collect();
@@ -841,8 +925,8 @@ mod tests {
 
     #[test]
     fn thompson() {
-        let bee = Nfst::id_single(Some("b".into()));
-        let ayy = Nfst::id_single(Some("a".into()));
+        let bee = Nfst::id_single(Some('b'.into()));
+        let ayy = Nfst::id_single(Some('a'.into()));
         let ayybee = ayy.union(&bee);
         let aa_to_starstar = ayy.concat(&ayy).image_cross(&ayybee.concat(&ayybee));
         let starstar_to_bb = ayybee.concat(&ayybee).image_cross(&bee.concat(&bee));
@@ -850,5 +934,18 @@ mod tests {
         let lel = aa_to_starstar.star().union(&starstar_to_bb.star());
 
         eprintln!("{}", lel.graphviz());
+    }
+
+    #[test]
+    fn symbol() {
+        let i = Symbol::from('b');
+        let j = Symbol::from('中');
+        let k = Symbol::from_pair(i, j);
+        eprintln!("{} {} {}", i, j, k);
+        eprintln!("i = {:#b}, j = {:#b}, k = {:#b}", i.0, j.0, k.0);
+        let (r, v) = k.decode_as_pair();
+        eprintln!("r = {:#b}, v = {:#b}", r.0, v.0);
+        assert_eq!(i, r);
+        assert_eq!(j, v);
     }
 }
