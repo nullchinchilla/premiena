@@ -7,11 +7,25 @@ pub struct Alphabet {
 }
 
 impl Alphabet {
+    /// The alphanumeric alphabet, for convenience
+    pub fn new_alphanum() -> Self {
+        Self::new(
+            "abcdefghijklmnopqrstuvwxyz1234567890"
+                .chars()
+                .map(Symbol::from),
+        )
+    }
+
     /// Create a new alphabet struct.
     pub fn new(segments: impl IntoIterator<Item = Symbol>) -> Self {
         Self {
             sigma: segments.into_iter().collect(),
         }
+    }
+
+    /// Add more
+    pub fn insert(&mut self, c: Symbol) {
+        self.sigma.insert(c);
     }
 
     /// The alphabet itself.
@@ -64,46 +78,6 @@ impl Alphabet {
     }
 }
 
-fn left_context(alphabet: &Alphabet, lambda: &Dfa, left: &Dfa, right: &Dfa) -> Dfa {
-    // alphabet.pre_iff_suf(
-    //     &alphabet.id_sigma().star().image_dfa().concat(lambda),
-    //     &left.concat(&alphabet.id_sigma().star().image_dfa()),
-    // )
-    let sigma_star_ignore_left = alphabet.ignore(&alphabet.id_sigma().star().image_dfa(), left);
-    alphabet.ignore(
-        &alphabet.pre_iff_suf(
-            &sigma_star_ignore_left
-                .concat(&alphabet.ignore(lambda, left))
-                .intersect(
-                    &sigma_star_ignore_left
-                        .concat(left)
-                        .complement(alphabet.sigma()),
-                ),
-            &left.concat(&sigma_star_ignore_left),
-        ),
-        right,
-    )
-}
-
-fn right_context(alphabet: &Alphabet, rho: &Dfa, left: &Dfa, right: &Dfa) -> Dfa {
-    // alphabet.pre_iff_suf(
-    //     &alphabet.id_sigma().star().image_dfa().concat(right),
-    //     &rho.concat(&alphabet.id_sigma().star().image_dfa()),
-    // )
-    let sigma_star_ignore_right = alphabet.ignore(&alphabet.id_sigma().star().image_dfa(), right);
-    alphabet.ignore(
-        &alphabet.pre_iff_suf(
-            &sigma_star_ignore_right.concat(right),
-            &rho.concat(&sigma_star_ignore_right).intersect(
-                &right
-                    .concat(&sigma_star_ignore_right)
-                    .complement(alphabet.sigma()),
-            ),
-        ),
-        left,
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -122,68 +96,5 @@ mod tests {
             .image_dfa()
             .complement(alphabet.sigma());
         eprintln!("{}", test.graphviz());
-    }
-
-    #[test]
-    fn fullhog() {
-        let input = "tapaktapka".chars().fold(Nfst::id_single(None), |a, b| {
-            a.concat(&Nfst::id_single(Some(Symbol::from(b))))
-        });
-        let alphabet = Alphabet::new("abcdefghijklmnopqrstuvwxyz".chars().map(Symbol::from));
-        let alphabet_with_brackets =
-            Alphabet::new("abcdefghijklmnopqrstuvwxyz<>".chars().map(Symbol::from));
-
-        let prologue = alphabet.intro(
-            &Alphabet::new(['<', '>'].into_iter().map(Symbol::from))
-                .id_sigma()
-                .image_dfa(),
-        );
-        let left_pattern = Nfst::id_single(Some(Symbol::from('a')));
-        let right_pattern = Nfst::id_single(Some(Symbol::from('t')));
-        let pre_change = Nfst::id_single(Some(Symbol::from('k')));
-        let post_change = Nfst::id_single(Some(Symbol::from('h')));
-
-        let left_context = left_context(
-            &alphabet_with_brackets,
-            &left_pattern.image_dfa(),
-            &Nfst::id_single(Some(Symbol::from('<'))).image_dfa(),
-            &Nfst::id_single(Some(Symbol::from('>'))).image_dfa(),
-        );
-        let right_context = right_context(
-            &alphabet_with_brackets,
-            &right_pattern.image_dfa(),
-            &Nfst::id_single(Some(Symbol::from('<'))).image_dfa(),
-            &Nfst::id_single(Some(Symbol::from('>'))).image_dfa(),
-        );
-        let emm = Alphabet::new(['<', '>'].into_iter().map(Symbol::from)).id_sigma();
-        let replace =
-            Nfst::id_dfa(&alphabet.ignore(&alphabet.id_sigma().image_dfa(), &emm.image_dfa()))
-                .concat(
-                    &Nfst::id_single(Some(Symbol::from('<')))
-                        .concat(&pre_change.image_cross(&post_change))
-                        .concat(&Nfst::id_single(Some(Symbol::from('>'))))
-                        .optional(),
-                )
-                .star();
-
-        let transducer = prologue
-            .compose(&Nfst::id_dfa(&right_context))
-            .compose(&replace)
-            .compose(&Nfst::id_dfa(&left_context))
-            .compose(&prologue.inverse());
-
-        eprintln!("made transducer");
-        let result = input.compose(&transducer).image_dfa();
-        eprintln!("made result");
-        // eprintln!("{}", replace.graphviz());
-
-        eprintln!("{}", result.graphviz());
-        for out in result.iter().take(20) {
-            eprintln!(
-                "{}",
-                out.into_iter()
-                    .fold(String::new(), |a, b| format!("{}{}", a, b))
-            );
-        }
     }
 }

@@ -7,6 +7,7 @@ use std::{
 };
 
 use genawaiter::sync::Gen;
+use smallvec::SmallVec;
 use tap::Tap;
 
 use self::table::{Table, Transition};
@@ -39,7 +40,7 @@ impl Display for Symbol {
 
 impl Symbol {
     fn invalid() -> Self {
-        Self(NonZeroU64::new(u64::MAX).unwrap())
+        Self(NonZeroU64::new(123456789).unwrap())
     }
 
     /// Create a symbol from two other symbols
@@ -259,7 +260,7 @@ impl Nfst {
             start_idx: q,
             accepting: std::iter::once(f).collect(),
         }
-        // .eliminate_double_epsilon()
+        .eliminate_double_epsilon()
     }
 
     /// Intersection of the two transducers. Only works if both are same-length transducers.
@@ -369,6 +370,11 @@ impl Nfst {
                 .collect(),
             accepting: paths.accepting.clone(),
         }
+    }
+
+    /// Simplifies this NFST.
+    pub fn simplify(&self) -> Self {
+        Self::from_paths(&self.paths())
     }
 
     /// Produces the reversed version of this automaton.
@@ -491,7 +497,6 @@ impl Nfst {
             transitions: new_transitions,
             accepting: accepting_states,
         }
-        .eliminate_double_epsilon()
     }
 
     /// Obtains the DFA corresponding to the regular language that is *produced* by this NFST.
@@ -502,9 +507,10 @@ impl Nfst {
     fn image_dfa_unminimized(&self) -> Dfa {
         // create lol
         let mut set_to_num = {
-            let mut record: HashMap<BTreeSet<usize>, usize> = HashMap::new();
+            let mut record = HashMap::new();
             let mut counter = 0;
-            move |s: BTreeSet<usize>| {
+            move |mut s: SmallVec<[usize; 4]>| {
+                s.sort_unstable();
                 *record.entry(s).or_insert_with(|| {
                     counter += 1;
                     counter - 1
@@ -784,8 +790,6 @@ impl Dfa {
             table: new_table,
             accepting: new_accepting,
         }
-        .eliminate_unreachable()
-        .minimize()
     }
 
     /// Concatenates this DFA with another (by using an NFA/NFST repr as an intermediary)
