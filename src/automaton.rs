@@ -7,6 +7,7 @@ use std::{
 };
 
 use genawaiter::sync::Gen;
+use rustc_hash::FxHashSet;
 use smallvec::SmallVec;
 use tap::Tap;
 
@@ -521,7 +522,7 @@ impl Nfst {
         let mut search_queue: Vec<im::HashSet<usize>> =
             vec![std::iter::once(self.start_idx).collect()];
         let mut dfa_table = Table::new();
-        let mut dfa_states = BTreeSet::new();
+        let mut dfa_states = FxHashSet::default();
         let mut dfa_accepting = im::HashSet::new();
 
         let mut itercount = 0;
@@ -566,13 +567,13 @@ impl Nfst {
                         a.union(self.transitions.edge_closure(b, |e| e.to_char.is_none()))
                     });
                 let resulting_state_num = set_to_num(resulting_state.iter().copied().collect());
+                dfa_table.insert(Transition {
+                    from_state: dfa_num,
+                    to_state: resulting_state_num,
+                    from_char: Some(ch),
+                    to_char: None,
+                });
                 if !dfa_states.contains(&resulting_state_num) {
-                    dfa_table.insert(Transition {
-                        from_state: dfa_num,
-                        to_state: resulting_state_num,
-                        from_char: Some(ch),
-                        to_char: None,
-                    });
                     search_queue.push(resulting_state);
                 }
             }
