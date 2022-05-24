@@ -523,7 +523,11 @@ impl Nfst {
         let mut dfa_table = Table::new();
         let mut dfa_states = BTreeSet::new();
         let mut dfa_accepting = im::HashSet::new();
+
+        let mut itercount = 0;
+
         while let Some(top) = search_queue.pop() {
+            itercount += 1;
             let top = top.into_iter().fold(im::HashSet::new(), |a, top| {
                 a.union(self.transitions.edge_closure(top, |t| t.to_char.is_none()))
             });
@@ -561,15 +565,25 @@ impl Nfst {
                     le_next.into_iter().fold(im::HashSet::new(), |a, b| {
                         a.union(self.transitions.edge_closure(b, |e| e.to_char.is_none()))
                     });
-                dfa_table.insert(Transition {
-                    from_state: dfa_num,
-                    to_state: set_to_num(resulting_state.iter().copied().collect()),
-                    from_char: Some(ch),
-                    to_char: None,
-                });
-                search_queue.push(resulting_state);
+                let resulting_state_num = set_to_num(resulting_state.iter().copied().collect());
+                if !dfa_states.contains(&resulting_state_num) {
+                    dfa_table.insert(Transition {
+                        from_state: dfa_num,
+                        to_state: resulting_state_num,
+                        from_char: Some(ch),
+                        to_char: None,
+                    });
+                    search_queue.push(resulting_state);
+                }
             }
         }
+
+        log::trace!(
+            "powerset {} => {} in {} iterations",
+            self.transitions.states().len(),
+            dfa_table.states().len(),
+            itercount
+        );
         Dfa {
             start: set_to_num(
                 self.transitions
