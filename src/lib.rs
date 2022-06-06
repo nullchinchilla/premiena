@@ -1,3 +1,3 @@
-pub mod alphabet;
-pub mod automaton;
-pub mod rewrite;
+mod automaton;
+mod rewrite;
+mod table;
