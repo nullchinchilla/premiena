@@ -1,4 +1,5 @@
 use anyhow::Context;
+use once_cell::sync::Lazy;
 
 use crate::automaton::{Automaton, Nfa, Nfst};
 
@@ -29,44 +30,62 @@ impl RewriteRule {
     }
 
     /// Generate the transducer corresponding to thie rewrite rule
-    pub fn transduce(&self, input: Nfa, reverse: bool) -> Nfa {
-        let emm = regex_to_nfa("<")
-            .unwrap()
-            .union(&regex_to_nfa(">").unwrap())
-            .determinize_min();
-        let no_wings = Nfa::all()
-            .concat(&emm)
-            .concat(&Nfa::all())
-            .determinize_min()
-            .complement();
+    pub fn transduce(&self, reverse: bool) -> impl Fn(Nfa) -> Nfa {
+        static LI: Lazy<Nfa> = Lazy::new(|| Nfa::from("["));
+        static LA: Lazy<Nfa> = Lazy::new(|| Nfa::from("<"));
+        static LC: Lazy<Nfa> = Lazy::new(|| Nfa::from("("));
+        static RI: Lazy<Nfa> = Lazy::new(|| Nfa::from("]"));
+        static RA: Lazy<Nfa> = Lazy::new(|| Nfa::from(">"));
+        static RC: Lazy<Nfa> = Lazy::new(|| Nfa::from(")"));
 
-        let prologue = Nfst::id_nfa(no_wings)
-            .compose(&emm.clone().intro())
+        static EMM: Lazy<Nfa> = Lazy::new(|| Nfa::from("<").union(&Nfa::from(">")));
+        static EMM_0: Lazy<Nfa> = Lazy::new(|| EMM.clone().union(&Nfa::from("0")));
+        static NO_WINGS: Lazy<Nfa> =
+            Lazy::new(|| Nfa::all().concat(&EMM_0).concat(&Nfa::all()).complement());
+        static PROLOGUE: Lazy<Nfst> = Lazy::new(|| {
+            Nfst::id_nfa(NO_WINGS.clone())
+                .compose(&EMM_0.clone().intro())
+                .deepsilon()
+        });
+
+        let obligatory = |phi: &Nfa, left: &Nfa, right: &Nfa| {
+            Nfa::all()
+                .concat(left)
+                .concat(phi)
+                .concat(right)
+                .concat(&Nfa::all())
+                .complement()
+                .determinize()
+        };
+
+        let left_context =
+            left_context(&self.left_ctx, &Nfa::from("<"), &Nfa::from(">")).determinize();
+        let right_context = right_context(&self.right_ctx, &"<".into(), &">".into()).determinize();
+
+        let pre_emm = self.pre.clone().ignore(&EMM).determinize();
+        let post_emm = self.post.clone().ignore(&EMM).determinize();
+
+        let context = right_context.intersect(&left_context).determinize();
+        let replace = Nfst::id_nfa(context)
+            .compose(
+                &Nfst::id_nfa(Nfa::sigma())
+                    .concat(
+                        &Nfst::id_nfa("<".into())
+                            .concat(&Nfst::id_nfa(pre_emm).image_cross(&Nfst::id_nfa(post_emm)))
+                            .concat(&Nfst::id_nfa(">".into()))
+                            .optional(),
+                    )
+                    .star(),
+            )
             .deepsilon();
 
-        let left_context = left_context(&self.left_ctx, &Nfa::from("<"), &Nfa::from(">"));
-        let right_context = right_context(&self.right_ctx, &"<".into(), &">".into());
-
-        let pre_emm = self.pre.clone().ignore(&emm).determinize_min();
-        let post_emm = self.post.clone().ignore(&emm).determinize_min();
-
-        let context = right_context.intersect(&left_context).determinize_min();
-        let replace = Nfst::id_nfa(context).compose(
-            &Nfst::id_nfa(Nfa::sigma())
-                .concat(
-                    &Nfst::id_nfa("<".into())
-                        .concat(&Nfst::id_nfa(pre_emm).image_cross(&Nfst::id_nfa(post_emm)))
-                        .concat(&Nfst::id_nfa(">".into()))
-                        .optional(),
-                )
-                .star(),
-        );
-
         let replace = if reverse { replace.inverse() } else { replace };
-        let pre_replace = Nfst::id_nfa(input.determinize_min()).compose(&prologue);
-        Nfst::id_nfa(pre_replace.compose(&replace).image_nfa().determinize_min())
-            .compose(&prologue.inverse().deepsilon())
-            .image_nfa()
+        move |input| {
+            let pre_replace = Nfst::id_nfa(input.determinize_min()).compose(&PROLOGUE);
+            Nfst::id_nfa(pre_replace.compose(&replace).image_nfa().determinize_min())
+                .compose(&PROLOGUE.clone().inverse().deepsilon())
+                .image_nfa()
+        }
     }
 }
 
@@ -75,10 +94,14 @@ mod tests {
     use super::*;
     #[test]
     fn simple_lenition() {
-        let rr = RewriteRule::from_line("b > f / a_a").unwrap();
-        let rule = rr.transduce("afa".into(), false).deepsilon();
+        let rr = RewriteRule::from_line("b > f / a_a00000").unwrap();
+        let rule = rr.transduce(false);
         // eprintln!("{}", rule.image_nfa().graphviz());
-        for s in rule.determinize_min().lang_iter_utf8().take(10) {
+        for s in rule("aba".into())
+            .determinize_min()
+            .lang_iter_utf8()
+            .take(10)
+        {
             eprintln!("{:?}", s)
         }
     }
