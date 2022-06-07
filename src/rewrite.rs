@@ -38,8 +38,10 @@ impl RewriteRule {
         static RA: Lazy<Nfa> = Lazy::new(|| Nfa::from(">"));
         static RC: Lazy<Nfa> = Lazy::new(|| Nfa::from(")"));
 
-        static LEFT: Lazy<Nfa> = Lazy::new(|| Nfa::from("<"));
-        static RIGHT: Lazy<Nfa> = Lazy::new(|| Nfa::from(">"));
+        static LRC: Lazy<Nfa> = Lazy::new(|| LA.clone().union(&LC).determinize_min());
+
+        static LEFT: Lazy<Nfa> = Lazy::new(|| LI.clone().union(&LA).union(&LC).determinize_min());
+        static RIGHT: Lazy<Nfa> = Lazy::new(|| RI.clone().union(&RA).union(&RC).determinize_min());
 
         static EMM: Lazy<Nfa> = Lazy::new(|| LEFT.clone().union(&RIGHT.clone()));
         static EMM_0: Lazy<Nfa> = Lazy::new(|| EMM.clone().union(&Nfa::from("0")));
@@ -68,20 +70,32 @@ impl RewriteRule {
         let post_emm = self.post.clone().ignore(&EMM).determinize();
 
         let context = right_context.intersect(&left_context).determinize();
-        let replace = Nfst::id_nfa(context)
-            .compose(
-                &Nfst::id_nfa(Nfa::sigma())
-                    .concat(
-                        &Nfst::id_nfa(LEFT.clone())
-                            .concat(&Nfst::id_nfa(pre_emm).image_cross(&Nfst::id_nfa(post_emm)))
-                            .concat(&Nfst::id_nfa(RIGHT.clone()))
-                            .optional(),
-                    )
-                    .star(),
-            )
-            .deepsilon();
+        let oblig = obligatory(&pre_emm, &LI, &RIGHT)
+            .intersect(&obligatory(&pre_emm, &LEFT, &RI))
+            .determinize_min();
 
+        let sigma_i_0_star = Nfa::all()
+            .concat(&LA.clone().union(&LC).union(&RA).union(&RC))
+            .concat(&Nfa::all())
+            .complement();
+
+        let inner_replace = Nfst::id_nfa(sigma_i_0_star)
+            .concat(
+                &Nfst::id_nfa(LA.clone())
+                    .concat(
+                        &Nfst::id_nfa(self.pre.clone().ignore(&LRC))
+                            .image_cross(&Nfst::id_nfa(self.post.clone().ignore(&LRC))),
+                    )
+                    .concat(&Nfst::id_nfa(RA.clone()))
+                    .optional(),
+            )
+            .star();
+        let replace = Nfst::id_nfa(oblig)
+            .compose(&Nfst::id_nfa(context))
+            .compose(&inner_replace)
+            .deepsilon();
         let replace = if reverse { replace.inverse() } else { replace };
+
         move |input| {
             let pre_replace = Nfst::id_nfa(input.determinize_min()).compose(&PROLOGUE);
             Nfst::id_nfa(pre_replace.compose(&replace).image_nfa().determinize_min())
@@ -96,7 +110,7 @@ mod tests {
     use super::*;
     #[test]
     fn simple_lenition() {
-        let rr = RewriteRule::from_line("b > f / a_a00000").unwrap();
+        let rr = RewriteRule::from_line("b > f / a_a").unwrap();
         let rule = rr.transduce(false);
         // eprintln!("{}", rule.image_nfa().graphviz());
         for s in rule("aba".into())
