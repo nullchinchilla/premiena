@@ -38,7 +38,10 @@ impl RewriteRule {
         static RA: Lazy<Nfa> = Lazy::new(|| Nfa::from(">"));
         static RC: Lazy<Nfa> = Lazy::new(|| Nfa::from(")"));
 
-        static EMM: Lazy<Nfa> = Lazy::new(|| Nfa::from("<").union(&Nfa::from(">")));
+        static LEFT: Lazy<Nfa> = Lazy::new(|| Nfa::from("<"));
+        static RIGHT: Lazy<Nfa> = Lazy::new(|| Nfa::from(">"));
+
+        static EMM: Lazy<Nfa> = Lazy::new(|| LEFT.clone().union(&RIGHT.clone()));
         static EMM_0: Lazy<Nfa> = Lazy::new(|| EMM.clone().union(&Nfa::from("0")));
         static NO_WINGS: Lazy<Nfa> =
             Lazy::new(|| Nfa::all().concat(&EMM_0).concat(&Nfa::all()).complement());
@@ -58,9 +61,8 @@ impl RewriteRule {
                 .determinize()
         };
 
-        let left_context =
-            left_context(&self.left_ctx, &Nfa::from("<"), &Nfa::from(">")).determinize();
-        let right_context = right_context(&self.right_ctx, &"<".into(), &">".into()).determinize();
+        let left_context = left_context(&self.left_ctx, &LEFT, &RIGHT).determinize();
+        let right_context = right_context(&self.right_ctx, &LEFT, &RIGHT).determinize();
 
         let pre_emm = self.pre.clone().ignore(&EMM).determinize();
         let post_emm = self.post.clone().ignore(&EMM).determinize();
@@ -70,9 +72,9 @@ impl RewriteRule {
             .compose(
                 &Nfst::id_nfa(Nfa::sigma())
                     .concat(
-                        &Nfst::id_nfa("<".into())
+                        &Nfst::id_nfa(LEFT.clone())
                             .concat(&Nfst::id_nfa(pre_emm).image_cross(&Nfst::id_nfa(post_emm)))
-                            .concat(&Nfst::id_nfa(">".into()))
+                            .concat(&Nfst::id_nfa(RIGHT.clone()))
                             .optional(),
                     )
                     .star(),
