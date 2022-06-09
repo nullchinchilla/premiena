@@ -42,6 +42,7 @@ fn hir_to_nfa(hir: &Hir) -> anyhow::Result<Nfa> {
 pub trait NfaExt {
     fn intro(self) -> Nfst;
     fn ignore(self, other: &Nfa) -> Nfa;
+    fn int_bytes(self) -> Nfa;
 }
 
 impl NfaExt for Nfa {
@@ -53,9 +54,13 @@ impl NfaExt for Nfa {
 
     fn intro(self) -> Nfst {
         let s = Nfst::id_nfa(self);
-        Nfst::id_nfa(Nfa::sigma())
+        Nfst::id_nfa(Nfa::sigma().concat(&Nfa::sigma()))
             .union(&Nfst::id_nfa(Nfa::empty()).image_cross(&s).star())
             .star()
+    }
+
+    fn int_bytes(self) -> Nfa {
+        self.intersect(&Nfa::sigma().concat(&Nfa::sigma()).star())
     }
 }
 

@@ -50,56 +50,70 @@ impl RewriteRule {
         static PROLOGUE: Lazy<Nfst> = Lazy::new(|| {
             Nfst::id_nfa(NO_WINGS.clone())
                 .compose(&EMM_0.clone().intro())
+                .compose(&Nfst::id_nfa(Nfa::all().int_bytes().determinize()))
                 .deepsilon()
         });
 
         let obligatory = |phi: &Nfa, left: &Nfa, right: &Nfa| {
             Nfa::all()
                 .concat(left)
-                .concat(phi)
+                .concat(&phi.clone().ignore(&EMM_0).determinize())
                 .concat(right)
                 .concat(&Nfa::all())
                 .complement()
-                .determinize()
+                .determinize_min()
         };
 
         let left_context = left_context(&self.left_ctx, &LEFT, &RIGHT).determinize();
         let right_context = right_context(&self.right_ctx, &LEFT, &RIGHT).determinize();
 
-        let pre_emm = self.pre.clone().ignore(&EMM).determinize();
+        // let pre_emm0 = self.pre.clone().ignore(&EMM_0).determinize();
         let post_emm = self.post.clone().ignore(&EMM).determinize();
 
         let context = right_context.intersect(&left_context).determinize();
-        let oblig = obligatory(&pre_emm, &LI, &RIGHT)
-            .intersect(&obligatory(&pre_emm, &LEFT, &RI))
+        let oblig = obligatory(&self.pre, &LI, &RIGHT)
+            .intersect(&obligatory(&self.pre, &LEFT, &RI))
             .determinize_min();
 
         let sigma_i_0_star = Nfa::all()
             .concat(&LA.clone().union(&LC).union(&RA).union(&RC))
             .concat(&Nfa::all())
-            .complement();
+            .complement()
+            .int_bytes()
+            .determinize_min();
 
         let inner_replace = Nfst::id_nfa(sigma_i_0_star)
             .concat(
                 &Nfst::id_nfa(LA.clone())
                     .concat(
-                        &Nfst::id_nfa(self.pre.clone().ignore(&LRC))
-                            .image_cross(&Nfst::id_nfa(self.post.clone().ignore(&LRC))),
+                        &Nfst::id_nfa(
+                            self.pre
+                                .clone()
+                                // .ignore(&"0".into())
+                                .ignore(&LRC)
+                                .determinize(),
+                        )
+                        .image_cross(&Nfst::id_nfa(
+                            self.post
+                                .clone()
+                                .ignore(&LRC)
+                                // .ignore(&"0".into())
+                                .determinize(),
+                        )),
                     )
                     .concat(&Nfst::id_nfa(RA.clone()))
                     .optional(),
             )
             .star();
-        let replace = Nfst::id_nfa(oblig)
-            .compose(&Nfst::id_nfa(context))
-            .compose(&inner_replace)
-            .deepsilon();
+        eprintln!("gonna replace");
+        let replace =
+            Nfst::id_nfa(context.intersect(&oblig).determinize_min()).compose(&inner_replace);
         let replace = if reverse { replace.inverse() } else { replace };
-
+        eprintln!("made replace");
         move |input| {
             let pre_replace = Nfst::id_nfa(input.determinize_min()).compose(&PROLOGUE);
             Nfst::id_nfa(pre_replace.compose(&replace).image_nfa().determinize_min())
-                .compose(&PROLOGUE.clone().inverse().deepsilon())
+                .compose(&PROLOGUE.clone().inverse())
                 .image_nfa()
         }
     }
@@ -110,15 +124,27 @@ mod tests {
     use super::*;
     #[test]
     fn simple_lenition() {
-        let rr = RewriteRule::from_line("b > f / a_a").unwrap();
+        let rr = RewriteRule::from_line("b > f / a_o").unwrap();
         let rule = rr.transduce(false);
         // eprintln!("{}", rule.image_nfa().graphviz());
-        for s in rule("aba".into())
+        for s in rule("abo".into())
+            .int_bytes()
             .determinize_min()
+            // .intersect(
+            //     &Nfa::all()
+            //         .int_bytes()
+            //         .concat(&"b".into())
+            //         .concat(&Nfa::all()),
+            // )
             .lang_iter_utf8()
-            .take(10)
+        // .filter(|c| c.chars().all(|c| c.is_ascii_graphic()))
+        // .take(1000)
         {
+            // if s.find('b').is_some() {
             eprintln!("{:?}", s)
+            // } else {
+            // eprint!(".")
+            // }
         }
     }
 }

@@ -258,8 +258,14 @@ impl Nfa {
 
     /// Intersect with another NFA.
     pub fn intersect(mut self, other: &Self) -> Self {
+        eprintln!("gonna intersect...");
         self = self.determinize_min();
         let other = other.clone().determinize_min();
+        eprintln!(
+            "about to intersect {}x{} determinized",
+            self.table.states().len(),
+            other.table.states().len()
+        );
         let mut new_table = Table::new();
         let mut ab2c = new_ab2c();
         for atrans in self.table.iter() {
