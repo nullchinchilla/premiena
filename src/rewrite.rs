@@ -40,7 +40,7 @@ impl RewriteRule {
         static RA: Lazy<Nfa> = Lazy::new(|| Nfa::from(">"));
         static RC: Lazy<Nfa> = Lazy::new(|| Nfa::from(")"));
 
-        static LRC: Lazy<Nfa> = Lazy::new(|| LA.clone().union(&LC).determinize_min());
+        static LRC: Lazy<Nfa> = Lazy::new(|| RC.clone().union(&LC).determinize_min());
 
         static LEFT: Lazy<Nfa> = Lazy::new(|| LI.clone().union(&LA).union(&LC).determinize_min());
         static RIGHT: Lazy<Nfa> = Lazy::new(|| RI.clone().union(&RA).union(&RC).determinize_min());
@@ -139,10 +139,10 @@ mod tests {
     #[test]
     fn simple_lenition() {
         let _ = env_logger::try_init();
-        let rr = RewriteRule::from_line("b > v / _h").unwrap();
+        let rr = RewriteRule::from_line("bh > v / _").unwrap();
         let rule = rr.transduce(false);
         // eprintln!("{}", rule.image_nfa().graphviz());
-        for s in rule("ababha".into()).lang_iter_utf8().take(100) {
+        for s in rule("ababha".into()).lang_iter_utf8() {
             // if s.contains("h") {
             eprintln!("{:?}", s)
             // }
