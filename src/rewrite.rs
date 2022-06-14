@@ -58,7 +58,13 @@ impl RewriteRule {
         // static NO_WINGS: Lazy<Nfa> =
         //     Lazy::new(|| Nfa::all().concat(&EMM_0).concat(&Nfa::all()).complement());
         static PROLOGUE: Lazy<Nfst> = Lazy::new(|| {
-            Nfst::id_nfa(SIGMA.clone().star().determinize_min())
+            let add_hash =
+                Nfst::image_cross(&Nfst::id_nfa(Nfa::empty()), &Nfst::id_nfa("%".into()));
+
+            add_hash
+                .clone()
+                .concat(&Nfst::id_nfa(SIGMA.clone().star().determinize_min()))
+                .concat(&add_hash)
                 .compose(&EMM_0.clone().determinize_min().intro())
                 .deepsilon()
         });
@@ -126,7 +132,7 @@ impl RewriteRule {
             let post_replace = pre_replace.compose(&replace).image_nfa().determinize_min();
 
             Nfst::id_nfa(post_replace)
-                .compose(&PROLOGUE.clone().inverse())
+                // .compose(&PROLOGUE.clone().inverse())
                 .image_nfa()
                 .determinize_min()
         }
@@ -139,10 +145,10 @@ mod tests {
     #[test]
     fn simple_lenition() {
         let _ = env_logger::try_init();
-        let rr = RewriteRule::from_line("bh > v / _").unwrap();
+        let rr = RewriteRule::from_line("x > gz / %e_a").unwrap();
         let rule = rr.transduce(false);
         // eprintln!("{}", rule.image_nfa().graphviz());
-        for s in rule("ababha".into()).lang_iter_utf8() {
+        for s in rule("example".into()).lang_iter_utf8() {
             // if s.contains("h") {
             eprintln!("{:?}", s)
             // }

@@ -98,11 +98,18 @@ pub fn left_context(sigma: &Nfa, lambda: &Nfa, left: &Nfa, right: &Nfa) -> Nfa {
     // .ignore(right)
     if let Some(true) = lambda.lang_iter().next().map(|l| l.is_empty()) {
         // cannot have two elements of the original sigma without a left between them
-        sigma.clone().ignore(right).concat(left).star()
+        sigma
+            .clone()
+            .ignore(right)
+            .ignore(&"0".into())
+            .concat(left)
+            .star()
     } else {
         pre_iff_suf(
-            &Nfa::all().concat(lambda),
-            &left.clone().concat(&Nfa::all()),
+            &Nfa::all()
+                .concat(&lambda.clone().ignore(right).ignore(&"0".into()))
+                .int_bytes(),
+            &left.clone().concat(&Nfa::all()).int_bytes(),
         )
     }
 }
@@ -129,8 +136,18 @@ pub fn right_context(sigma: &Nfa, rho: &Nfa, left: &Nfa, right: &Nfa) -> Nfa {
     //     }
     if let Some(true) = rho.lang_iter().next().map(|l| l.is_empty()) {
         // cannot have two elements of the original sigma without a right between them
-        right.clone().concat(&sigma.clone().ignore(left)).star()
+        right
+            .clone()
+            .concat(&sigma.clone().ignore(left).ignore(&"0".into()))
+            .star()
     } else {
-        pre_iff_suf(&Nfa::all().concat(right), &rho.clone().concat(&Nfa::all()))
+        pre_iff_suf(
+            &Nfa::all().concat(right).int_bytes(),
+            &rho.clone()
+                .ignore(left)
+                .ignore(&"0".into())
+                .concat(&Nfa::all())
+                .int_bytes(),
+        )
     }
 }

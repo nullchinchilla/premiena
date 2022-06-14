@@ -1,4 +1,4 @@
-# English spelling implementation
+# English spelling implementation. A slightly modified version of http://zompist.com/spell.html
 variables:
   U: "(a|e|i|o|u)"
   V: "(a|e|i|o|u|ä|ë|ï|ö|ü|â|ê|î|ô|û|ù|ò|@)"
@@ -6,4 +6,16 @@ variables:
   S: (â|ê|î|ô|û|ù|ò|@)
   A: (a|â|ä)
 rules:
-  - ch > c / _
+  # get rid of some digraphs
+  - ch > č / _
+  - sh > š / _
+  - ph > f / _
+  - th > þ / _
+  - qu > kw / _
+  # other spelling-level changes
+  - w > 0 / _r
+  - w > 0 / _ho
+  - h > 0 / w_
+  - h > 0 / %r_
+  - h > 0 / ${V}_%
+  - x > gz / %e_a
