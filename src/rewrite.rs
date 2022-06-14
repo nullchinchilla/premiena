@@ -126,7 +126,7 @@ impl RewriteRule {
             let post_replace = pre_replace.compose(&replace).image_nfa().determinize_min();
 
             Nfst::id_nfa(post_replace)
-                // .compose(&PROLOGUE.clone().inverse())
+                .compose(&PROLOGUE.clone().inverse())
                 .image_nfa()
                 .determinize_min()
         }
@@ -139,10 +139,10 @@ mod tests {
     #[test]
     fn simple_lenition() {
         let _ = env_logger::try_init();
-        let rr = RewriteRule::from_line("b > v / a_a").unwrap();
+        let rr = RewriteRule::from_line("b > v / _h").unwrap();
         let rule = rr.transduce(false);
         // eprintln!("{}", rule.image_nfa().graphviz());
-        for s in rule("abha".into()).lang_iter_utf8() {
+        for s in rule("ababha".into()).lang_iter_utf8().take(100) {
             // if s.contains("h") {
             eprintln!("{:?}", s)
             // }

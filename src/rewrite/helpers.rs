@@ -81,47 +81,56 @@ pub fn pre_iff_suf(l1: &Nfa, l2: &Nfa) -> Nfa {
 }
 
 pub fn left_context(sigma: &Nfa, lambda: &Nfa, left: &Nfa, right: &Nfa) -> Nfa {
-    let sigma_star_ignore_left = sigma
-        .clone()
-        .star()
-        .ignore(left)
-        .determinize_min()
-        .ignore(&"0".into())
-        .determinize_min();
-    pre_iff_suf(
-        &sigma_star_ignore_left
-            .clone()
-            .concat(&lambda.clone().ignore(left).ignore(&"0".into()))
-            .intersect(&sigma_star_ignore_left.clone().concat(left).complement()),
-        &left.clone().concat(&sigma_star_ignore_left),
-    )
-    .ignore(right)
-
+    // let sigma_star_ignore_left = sigma
+    //     .clone()
+    //     .star()
+    //     .ignore(left)
+    //     .determinize_min()
+    //     .ignore(&"0".into())
+    //     .determinize_min();
     // pre_iff_suf(
-    //     &Nfa::all().concat(lambda),
-    //     &left.clone().concat(&Nfa::all()),
+    //     &sigma_star_ignore_left
+    //         .clone()
+    //         .concat(&lambda.clone().ignore(left).ignore(&"0".into()))
+    //         .intersect(&sigma_star_ignore_left.clone().concat(left).complement()),
+    //     &left.clone().concat(&sigma_star_ignore_left),
     // )
+    // .ignore(right)
+    if let Some(true) = lambda.lang_iter().next().map(|l| l.is_empty()) {
+        // cannot have two elements of the original sigma without a left between them
+        sigma.clone().ignore(right).concat(left).star()
+    } else {
+        pre_iff_suf(
+            &Nfa::all().concat(lambda),
+            &left.clone().concat(&Nfa::all()),
+        )
+    }
 }
 
 pub fn right_context(sigma: &Nfa, rho: &Nfa, left: &Nfa, right: &Nfa) -> Nfa {
-    let sigma_star_ignore_right = sigma
-        .clone()
-        .star()
-        .ignore(right)
-        .determinize_min()
-        .ignore(&"0".into())
-        .determinize_min();
-    pre_iff_suf(
-        &sigma_star_ignore_right.clone().concat(right),
-        &rho.clone()
-            .ignore(right)
-            .ignore(&"0".into())
-            .concat(&sigma_star_ignore_right)
-            .intersect(&right.clone().concat(&sigma_star_ignore_right).complement()),
-    )
-    .ignore(left)
+    // let sigma_star_ignore_right = sigma
+    //     .clone()
+    //     .star()
+    //     .ignore(right)
+    //     .determinize_min()
+    //     .ignore(&"0".into())
+    //     .determinize_min();
+    // pre_iff_suf(
+    //     &sigma_star_ignore_right.clone().concat(right),
+    //     &rho.clone()
+    //         .ignore(right)
+    //         .ignore(&"0".into())
+    //         .concat(&sigma_star_ignore_right)
+    //         .intersect(&right.clone().concat(&sigma_star_ignore_right).complement()),
+    // )
+    // .ignore(left)
     //     if rho.lang_iter().next() == Some(vec![]) {
     //         return Nfa::all();
     //     }
-    //     pre_iff_suf(&Nfa::all().concat(right), &rho.clone().concat(&Nfa::all()))
+    if let Some(true) = rho.lang_iter().next().map(|l| l.is_empty()) {
+        // cannot have two elements of the original sigma without a right between them
+        right.clone().concat(&sigma.clone().ignore(left)).star()
+    } else {
+        pre_iff_suf(&Nfa::all().concat(right), &rho.clone().concat(&Nfa::all()))
+    }
 }
