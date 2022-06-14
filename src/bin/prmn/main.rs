@@ -64,7 +64,11 @@ fn main() -> anyhow::Result<()> {
         for rule in rules.iter() {
             line = rule(line).determinize_min();
         }
-        for res in line.lang_iter_utf8().take(20) {
+        for res in line
+            .lang_iter_utf8()
+            .filter(|l| l.chars().all(|c| c.is_ascii_alphabetic()))
+            .take(20)
+        {
             print!("{} ", res)
         }
         println!();
