@@ -132,7 +132,7 @@ impl RewriteRule {
             let post_replace = pre_replace.compose(&replace).image_nfa().determinize_min();
 
             Nfst::id_nfa(post_replace)
-                // .compose(&PROLOGUE.clone().inverse())
+                .compose(&PROLOGUE.clone().inverse())
                 .image_nfa()
                 .determinize_min()
         }

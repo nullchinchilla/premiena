@@ -7,6 +7,7 @@ use std::{
     borrow::Cow,
     io::{stdin, BufRead, BufReader},
     path::PathBuf,
+    time::Instant,
 };
 use thiserror::Error;
 mod scfile;
@@ -50,7 +51,10 @@ fn main() -> anyhow::Result<()> {
                         .ok_or(ExpandError::UndefinedVariable)?,
                 ))
             })?;
-            Ok(RewriteRule::from_line(s.trim())?.transduce(args.reverse))
+            let start = Instant::now();
+            let res = RewriteRule::from_line(s.trim())?.transduce(args.reverse);
+            eprintln!("{:?} took {:?}", s, start.elapsed());
+            Ok(res)
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
     eprintln!("rules compiled!");
@@ -60,7 +64,7 @@ fn main() -> anyhow::Result<()> {
         for rule in rules.iter() {
             line = rule(line).determinize_min();
         }
-        for res in line.lang_iter_utf8() {
+        for res in line.lang_iter_utf8().take(20) {
             print!("{} ", res)
         }
         println!();
