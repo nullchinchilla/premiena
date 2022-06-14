@@ -1,0 +1,9 @@
+# English spelling implementation
+variables:
+  U: "(a|e|i|o|u)"
+  V: "(a|e|i|o|u|ä|ë|ï|ö|ü|â|ê|î|ô|û|ù|ò|@)"
+  L: (ä|ë|ï|ö|ü)
+  S: (â|ê|î|ô|û|ù|ò|@)
+  A: (a|â|ä)
+rules:
+  - ch > ç / 0_0

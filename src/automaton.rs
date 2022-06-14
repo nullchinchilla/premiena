@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, iter::once};
+use std::{collections::VecDeque, iter::once, time::Instant};
 
 use genawaiter::sync::Gen;
 use itertools::Itertools;
@@ -258,14 +258,8 @@ impl Nfa {
 
     /// Intersect with another NFA.
     pub fn intersect(mut self, other: &Self) -> Self {
-        eprintln!("gonna intersect...");
         self = self.determinize_min();
         let other = other.clone().determinize_min();
-        eprintln!(
-            "about to intersect {}x{} determinized",
-            self.table.states().len(),
-            other.table.states().len()
-        );
         let mut new_table = Table::new();
         let mut ab2c = new_ab2c();
         for atrans in self.table.iter() {
@@ -388,6 +382,8 @@ impl Nfa {
 
     /// Convert into a DFA.
     pub fn determinize(mut self) -> Self {
+        let start = Instant::now();
+        let pre_det = self.table.states().len();
         // first remove epsilons. this makes our life easier
         self = self.deepsilon();
         // then we use the powerset construction
@@ -398,7 +394,9 @@ impl Nfa {
         let mut seen = FxHashSet::default();
         let mut new_table = Table::new();
         let mut new_accepting = FxHashSet::default();
+        let mut ctr = 0;
         while let Some(top_set) = set_stack.pop() {
+            ctr += 1;
             let top_num = set_to_num(top_set.iter().copied().collect());
             if !seen.insert(top_num) {
                 continue;
@@ -439,6 +437,13 @@ impl Nfa {
                 }
             }
         }
+        log::trace!(
+            "determinize {} => {} in {} steps ({:?})",
+            pre_det,
+            new_table.states().len(),
+            ctr,
+            start.elapsed()
+        );
         Self {
             start: new_start,
             table: new_table,
@@ -448,7 +453,7 @@ impl Nfa {
 
     /// Create a minimized, determinized version.
     pub fn determinize_min(mut self) -> Self {
-        self.reverse().determinize().reverse().deepsilon()
+        self.reverse().determinize().reverse().determinize()
     }
 
     /// Iterates through the regular language described by this NFA.
@@ -597,6 +602,7 @@ impl Nfst {
 
     /// Composes this FST with another one
     pub fn compose(&self, other: &Self) -> Self {
+        let start = Instant::now();
         // function that maps a pair of state ids to the state id in the new fst
         let mut ab2c = new_ab2c();
         // we go through the cartesian product of state ids
@@ -609,13 +615,6 @@ impl Nfst {
             if !seen.insert((i, j)) {
                 continue;
             }
-            // eprintln!("going through ({},{})", i, j);
-            let chars: FxHashSet<Option<Symbol>> = self
-                .table
-                .outgoing_edges(i)
-                .into_iter()
-                .map(|t| t.from_char)
-                .collect();
             // first handle epsilon
             for second_stage in other.table.transition(j, None) {
                 new_table.insert(Transition {
@@ -626,7 +625,7 @@ impl Nfst {
                 });
                 dfs_stack.push((i, second_stage.1));
             }
-            for ch in chars {
+            for ch in Symbol::SIGMA.into_iter().map(Some).chain(once(None)) {
                 for first_stage in self.table.transition(i, ch) {
                     for second_stage in other.table.transition(j, first_stage.0) {
                         new_table.insert(Transition {
@@ -657,12 +656,13 @@ impl Nfst {
                 accepting_states.insert(ab2c(*i, *j));
             }
         }
-        eprintln!(
-            "compose of {}x{} => {} took {} steps",
+        log::trace!(
+            "compose of {}x{} => {} took {} steps ({:?})",
             self.table.states().len(),
             other.table.states().len(),
             new_table.states().len(),
-            counter
+            counter,
+            start.elapsed()
         );
         Nfst {
             start: ab2c(self.start, other.start),

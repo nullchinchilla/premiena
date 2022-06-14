@@ -25,6 +25,7 @@ fn hir_to_nfa(hir: &Hir) -> anyhow::Result<Nfa> {
             let inner = hir_to_nfa(&r.hir)?;
             inner.star()
         }
+        HirKind::Group(g) => hir_to_nfa(&g.hir)?,
         HirKind::Concat(cc) => cc.iter().try_fold(Nfa::empty(), |a, b| {
             Ok::<_, anyhow::Error>(a.concat(&hir_to_nfa(b)?))
         })?,
@@ -79,33 +80,48 @@ pub fn pre_iff_suf(l1: &Nfa, l2: &Nfa) -> Nfa {
     if_pre_then_suf(l1, l2).intersect(&if_suf_then_pre(l1, l2))
 }
 
-pub fn left_context(lambda: &Nfa, left: &Nfa, right: &Nfa) -> Nfa {
-    // alphabet.pre_iff_suf(
-    //     &alphabet.id_sigma().star().image_dfa().concat(lambda),
-    //     &left.concat(&alphabet.id_sigma().star().image_dfa()),
-    // )
-    let sigma_star_ignore_left = Nfa::sigma().star().ignore(left);
+pub fn left_context(sigma: &Nfa, lambda: &Nfa, left: &Nfa, right: &Nfa) -> Nfa {
+    let sigma_star_ignore_left = sigma
+        .clone()
+        .star()
+        .ignore(left)
+        .determinize_min()
+        .ignore(&"0".into())
+        .determinize_min();
     pre_iff_suf(
         &sigma_star_ignore_left
             .clone()
-            .concat(&lambda.clone().ignore(left))
+            .concat(&lambda.clone().ignore(left).ignore(&"0".into()))
             .intersect(&sigma_star_ignore_left.clone().concat(left).complement()),
         &left.clone().concat(&sigma_star_ignore_left),
     )
     .ignore(right)
+
+    // pre_iff_suf(
+    //     &Nfa::all().concat(lambda),
+    //     &left.clone().concat(&Nfa::all()),
+    // )
 }
 
-pub fn right_context(rho: &Nfa, left: &Nfa, right: &Nfa) -> Nfa {
-    // alphabet.pre_iff_suf(
-    //     &alphabet.id_sigma().star().image_dfa().concat(right),
-    //     &rho.concat(&alphabet.id_sigma().star().image_dfa()),
-    // )
-    let sigma_star_ignore_right = Nfa::sigma().star().ignore(right);
+pub fn right_context(sigma: &Nfa, rho: &Nfa, left: &Nfa, right: &Nfa) -> Nfa {
+    let sigma_star_ignore_right = sigma
+        .clone()
+        .star()
+        .ignore(right)
+        .determinize_min()
+        .ignore(&"0".into())
+        .determinize_min();
     pre_iff_suf(
         &sigma_star_ignore_right.clone().concat(right),
         &rho.clone()
+            .ignore(right)
+            .ignore(&"0".into())
             .concat(&sigma_star_ignore_right)
             .intersect(&right.clone().concat(&sigma_star_ignore_right).complement()),
     )
     .ignore(left)
+    //     if rho.lang_iter().next() == Some(vec![]) {
+    //         return Nfa::all();
+    //     }
+    //     pre_iff_suf(&Nfa::all().concat(right), &rho.clone().concat(&Nfa::all()))
 }

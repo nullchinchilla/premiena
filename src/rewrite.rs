@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use anyhow::Context;
 use once_cell::sync::Lazy;
 
@@ -45,32 +47,37 @@ impl RewriteRule {
 
         static EMM: Lazy<Nfa> = Lazy::new(|| LEFT.clone().union(&RIGHT.clone()));
         static EMM_0: Lazy<Nfa> = Lazy::new(|| EMM.clone().union(&Nfa::from("0")));
-        static NO_WINGS: Lazy<Nfa> =
-            Lazy::new(|| Nfa::all().concat(&EMM_0).concat(&Nfa::all()).complement());
+
+        static SIGMA: Lazy<Nfa> = Lazy::new(|| {
+            Nfa::sigma()
+                .concat(&Nfa::sigma())
+                .subtract(&EMM_0)
+                .determinize_min()
+        });
+
+        // static NO_WINGS: Lazy<Nfa> =
+        //     Lazy::new(|| Nfa::all().concat(&EMM_0).concat(&Nfa::all()).complement());
         static PROLOGUE: Lazy<Nfst> = Lazy::new(|| {
-            Nfst::id_nfa(NO_WINGS.clone())
-                .compose(&EMM_0.clone().intro())
-                .compose(&Nfst::id_nfa(Nfa::all().int_bytes().determinize()))
+            Nfst::id_nfa(SIGMA.clone().star().determinize_min())
+                .compose(&EMM_0.clone().determinize_min().intro())
                 .deepsilon()
         });
 
         let obligatory = |phi: &Nfa, left: &Nfa, right: &Nfa| {
             Nfa::all()
+                .int_bytes()
                 .concat(left)
                 .concat(&phi.clone().ignore(&EMM_0).determinize())
                 .concat(right)
-                .concat(&Nfa::all())
+                .concat(&Nfa::all().int_bytes())
                 .complement()
                 .determinize_min()
         };
 
-        let left_context = left_context(&self.left_ctx, &LEFT, &RIGHT).determinize();
-        let right_context = right_context(&self.right_ctx, &LEFT, &RIGHT).determinize();
+        let left_context = left_context(&SIGMA, &self.left_ctx, &LEFT, &RIGHT).determinize_min();
+        let right_context = right_context(&SIGMA, &self.right_ctx, &LEFT, &RIGHT).determinize_min();
 
-        // let pre_emm0 = self.pre.clone().ignore(&EMM_0).determinize();
-        let post_emm = self.post.clone().ignore(&EMM).determinize();
-
-        let context = right_context.intersect(&left_context).determinize();
+        let context = left_context.intersect(&right_context).determinize();
         let oblig = obligatory(&self.pre, &LI, &RIGHT)
             .intersect(&obligatory(&self.pre, &LEFT, &RI))
             .determinize_min();
@@ -104,17 +111,24 @@ impl RewriteRule {
                     .concat(&Nfst::id_nfa(RA.clone()))
                     .optional(),
             )
-            .star();
-        eprintln!("gonna replace");
+            .star()
+            .deepsilon();
         let replace =
             Nfst::id_nfa(context.intersect(&oblig).determinize_min()).compose(&inner_replace);
         let replace = if reverse { replace.inverse() } else { replace };
-        eprintln!("made replace");
         move |input| {
-            let pre_replace = Nfst::id_nfa(input.determinize_min()).compose(&PROLOGUE);
-            Nfst::id_nfa(pre_replace.compose(&replace).image_nfa().determinize_min())
-                .compose(&PROLOGUE.clone().inverse())
+            let pre_replace = Nfst::id_nfa(
+                Nfst::id_nfa(input.determinize_min())
+                    .compose(&PROLOGUE)
+                    .image_nfa()
+                    .determinize_min(),
+            );
+            let post_replace = pre_replace.compose(&replace).image_nfa().determinize_min();
+
+            Nfst::id_nfa(post_replace)
+                // .compose(&PROLOGUE.clone().inverse())
                 .image_nfa()
+                .determinize_min()
         }
     }
 }
@@ -124,26 +138,13 @@ mod tests {
     use super::*;
     #[test]
     fn simple_lenition() {
-        let rr = RewriteRule::from_line("b > f / a_o").unwrap();
+        let _ = env_logger::try_init();
+        let rr = RewriteRule::from_line("b > v / a_a").unwrap();
         let rule = rr.transduce(false);
         // eprintln!("{}", rule.image_nfa().graphviz());
-        for s in rule("abo".into())
-            .int_bytes()
-            .determinize_min()
-            // .intersect(
-            //     &Nfa::all()
-            //         .int_bytes()
-            //         .concat(&"b".into())
-            //         .concat(&Nfa::all()),
-            // )
-            .lang_iter_utf8()
-        // .filter(|c| c.chars().all(|c| c.is_ascii_graphic()))
-        // .take(1000)
-        {
-            // if s.find('b').is_some() {
+        for s in rule("abha".into()).lang_iter_utf8() {
+            // if s.contains("h") {
             eprintln!("{:?}", s)
-            // } else {
-            // eprint!(".")
             // }
         }
     }
