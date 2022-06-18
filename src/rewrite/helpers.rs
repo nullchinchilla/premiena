@@ -10,7 +10,8 @@ use crate::automaton::{Automaton, Nfa, Nfst};
 /// Transforms a regexp to an NFA.
 pub fn regex_to_nfa(s: &str) -> anyhow::Result<Nfa> {
     let hir: Hir = Parser::new().parse(s.trim())?;
-    hir_to_nfa(&hir)
+    let r = hir_to_nfa(&hir)?;
+    Ok(r)
 }
 
 /// Transforms a regexp hir to an NFA
@@ -27,7 +28,7 @@ fn hir_to_nfa(hir: &Hir) -> anyhow::Result<Nfa> {
         }
         HirKind::Group(g) => hir_to_nfa(&g.hir)?,
         HirKind::Concat(cc) => cc.iter().try_fold(Nfa::empty(), |a, b| {
-            Ok::<_, anyhow::Error>(a.concat(&hir_to_nfa(b)?))
+            Ok::<_, anyhow::Error>(a.determinize().concat(&hir_to_nfa(b)?))
         })?,
         HirKind::Alternation(cc) => {
             let (a, b) = cc.split_first().unwrap();
@@ -107,7 +108,13 @@ pub fn left_context(sigma: &Nfa, lambda: &Nfa, left: &Nfa, right: &Nfa) -> Nfa {
     } else {
         pre_iff_suf(
             &Nfa::all()
-                .concat(&lambda.clone().ignore(right).ignore(&"0".into()))
+                .concat(
+                    &lambda
+                        .clone()
+                        .ignore(right)
+                        .determinize_min()
+                        .ignore(&"0".into()),
+                )
                 .int_bytes(),
             &left.clone().concat(&Nfa::all()).int_bytes(),
         )

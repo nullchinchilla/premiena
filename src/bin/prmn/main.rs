@@ -66,7 +66,7 @@ fn main() -> anyhow::Result<()> {
         }
         for res in line
             .lang_iter_utf8()
-            .filter(|l| l.chars().all(|c| c.is_ascii_alphabetic()))
+            // .filter(|l| l.chars().all(|c| c.is_ascii_alphabetic()))
             .take(20)
         {
             print!("{} ", res)

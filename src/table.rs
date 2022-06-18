@@ -194,21 +194,17 @@ impl Table {
     }
 
     /// Gets all the edges going out of one node
-    pub fn outgoing_edges(&self, state: u32) -> Vec<Transition> {
-        if let Some(val) = self.forwards.get(&state) {
-            val.iter()
-                .flat_map(|p| {
-                    p.1.iter().map(|q| Transition {
-                        from_state: state,
-                        to_state: q.1,
-                        from_char: *p.0,
-                        to_char: q.0,
-                    })
+    pub fn outgoing_edges(&self, state: u32) -> impl Iterator<Item = Transition> + '_ {
+        self.forwards.get(&state).into_iter().flat_map(move |d| {
+            d.iter().flat_map(move |p| {
+                p.1.iter().map(move |q| Transition {
+                    from_state: state,
+                    to_state: q.1,
+                    from_char: *p.0,
+                    to_char: q.0,
                 })
-                .collect()
-        } else {
-            vec![]
-        }
+            })
+        })
     }
 
     /// Gets all the edges going into one node

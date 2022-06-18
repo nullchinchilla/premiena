@@ -216,6 +216,11 @@ impl Nfa {
         Self::null().complement()
     }
 
+    /// A NFA that contains all integer-byte strings.
+    pub fn all_int_bytes() -> Self {
+        Self::sigma().concat(&Self::sigma()).star()
+    }
+
     /// A NFA that contains a single symbol
     pub fn sigma() -> Self {
         Symbol::SIGMA
@@ -437,13 +442,15 @@ impl Nfa {
                 }
             }
         }
-        log::trace!(
-            "determinize {} => {} in {} steps ({:?})",
-            pre_det,
-            new_table.states().len(),
-            ctr,
-            start.elapsed()
-        );
+        if start.elapsed().as_secs_f64() > 1.0 {
+            log::warn!(
+                "determinize {} => {} took {} steps ({:?})",
+                pre_det,
+                new_table.states().len(),
+                ctr,
+                start.elapsed()
+            );
+        }
         Self {
             start: new_start,
             table: new_table,
@@ -452,7 +459,7 @@ impl Nfa {
     }
 
     /// Create a minimized, determinized version.
-    pub fn determinize_min(mut self) -> Self {
+    pub fn determinize_min(self) -> Self {
         self.reverse().determinize().reverse().determinize()
     }
 
@@ -656,19 +663,22 @@ impl Nfst {
                 accepting_states.insert(ab2c(*i, *j));
             }
         }
-        log::trace!(
-            "compose of {}x{} => {} took {} steps ({:?})",
-            self.table.states().len(),
-            other.table.states().len(),
-            new_table.states().len(),
-            counter,
-            start.elapsed()
-        );
+        if start.elapsed().as_secs_f64() > 1.0 {
+            log::warn!(
+                "compose of {}x{} => {} took {} steps ({:?})",
+                self.table.states().len(),
+                other.table.states().len(),
+                new_table.states().len(),
+                counter,
+                start.elapsed()
+            );
+        }
         Nfst {
             start: ab2c(self.start, other.start),
             table: new_table,
             accepting: accepting_states,
         }
+        .deepsilon()
     }
 
     /// Optional.

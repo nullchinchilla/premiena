@@ -5,7 +5,7 @@ variables:
   L: (ä|ë|ï|ö|ü)
   S: (â|ê|î|ô|û|ù|ò|@)
   A: (a|â|ä)
-  C: (b|c|d|f|g|h|j|k|l|m|n|p|q|r|s|t|v|w|x|y|z|č|š|þ|ñ|)
+  C: (b|c|d|f|g|h|j|k|l|m|n|p|q|r|s|t|v|w|x|y|z|č|š|þ|ñ)
 rules:
   # get rid of some digraphs
   - ch > č / _
@@ -38,3 +38,10 @@ rules:
   - m > 0 / %_n
   - p > 0 / %_s
   - t > 0 / %_m
+  # medial y is i
+  - y > ï / %${C}_
+  - y > ï / %${C}${C}_
+  # - y > ï / %${C}${C}${C}_
+  - ey > ë / _
+  - ay > ä / _
+  - oy > öy / _

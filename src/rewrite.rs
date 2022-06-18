@@ -83,7 +83,7 @@ impl RewriteRule {
         let left_context = left_context(&SIGMA, &self.left_ctx, &LEFT, &RIGHT).determinize_min();
         let right_context = right_context(&SIGMA, &self.right_ctx, &LEFT, &RIGHT).determinize_min();
 
-        let context = left_context.intersect(&right_context).determinize();
+        let context = left_context.intersect(&right_context).determinize_min();
         let oblig = obligatory(&self.pre, &LI, &RIGHT)
             .intersect(&obligatory(&self.pre, &LEFT, &RI))
             .determinize_min();
@@ -104,14 +104,14 @@ impl RewriteRule {
                                 .clone()
                                 // .ignore(&"0".into())
                                 .ignore(&LRC)
-                                .determinize(),
+                                .determinize_min(),
                         )
                         .image_cross(&Nfst::id_nfa(
                             self.post
                                 .clone()
                                 .ignore(&LRC)
                                 // .ignore(&"0".into())
-                                .determinize(),
+                                .determinize_min(),
                         )),
                     )
                     .concat(&Nfst::id_nfa(RA.clone()))
