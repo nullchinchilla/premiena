@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use ahash::{AHashMap, AHashSet};
 use tap::Tap;
 
 /// A single, hex symbol
@@ -112,21 +112,21 @@ pub struct Transition {
 #[derive(Clone)]
 pub struct Table {
     // state -> (char -> setof outchar, state)
-    forwards: FxHashMap<u32, FxHashMap<Option<Symbol>, FxHashSet<(Option<Symbol>, u32)>>>,
-    backwards: FxHashMap<u32, FxHashMap<Option<Symbol>, FxHashSet<(Option<Symbol>, u32)>>>,
+    forwards: AHashMap<u32, AHashMap<Option<Symbol>, AHashSet<(Option<Symbol>, u32)>>>,
+    backwards: AHashMap<u32, AHashMap<Option<Symbol>, AHashSet<(Option<Symbol>, u32)>>>,
 }
 
 impl Table {
     /// Create an empty new table.
     pub fn new() -> Self {
         Self {
-            forwards: FxHashMap::default(),
-            backwards: FxHashMap::default(),
+            forwards: AHashMap::default(),
+            backwards: AHashMap::default(),
         }
     }
 
     /// All the states.
-    pub fn states(&self) -> FxHashSet<u32> {
+    pub fn states(&self) -> AHashSet<u32> {
         self.forwards
             .keys()
             .chain(self.backwards.keys())
@@ -140,8 +140,8 @@ impl Table {
     }
 
     /// Closure, given a particular predicate
-    pub fn edge_closure(&self, start: u32, pred: impl Fn(&Transition) -> bool) -> FxHashSet<u32> {
-        let mut group = FxHashSet::default();
+    pub fn edge_closure(&self, start: u32, pred: impl Fn(&Transition) -> bool) -> AHashSet<u32> {
+        let mut group = AHashSet::default();
         let mut dfa_stack = vec![start];
         while let Some(top) = dfa_stack.pop() {
             group.insert(top);
@@ -176,7 +176,7 @@ impl Table {
         &self,
         state: u32,
         input: impl Into<Option<Symbol>>,
-    ) -> FxHashSet<(Option<Symbol>, u32)> {
+    ) -> AHashSet<(Option<Symbol>, u32)> {
         let input: Option<Symbol> = input.into();
         let mut res = if let Some(val) = self.forwards.get(&state) {
             if let Some(val) = val.get(&input) {

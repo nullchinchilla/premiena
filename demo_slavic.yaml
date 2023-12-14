@@ -1,0 +1,41 @@
+categories:
+  C:
+    [
+      p,
+      t,
+      ť,
+      k,
+      b,
+      d,
+      ď,
+      g,
+      m,
+      n,
+      ň,
+      c,
+      č,
+      dz,
+      dž,
+      s,
+      š,
+      x,
+      z,
+      ž,
+      r,
+      ř,
+      l,
+      ľ,
+      v,
+      j,
+    ]
+  V: [a, e, i, o, u, ě, ę, ǫ, ь, ъ, W]
+  X: [ь, ъ]
+  S: [è, ò]
+
+rules:
+  # fall of the yers
+  - X > W / _#
+  - X > W / _CC*V
+  - X > S / _CC*W
+  - X > W / _CC*S
+  - W > / _

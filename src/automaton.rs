@@ -1,8 +1,9 @@
 use std::{collections::VecDeque, iter::once, time::Instant};
 
+use ahash::{AHashMap, AHashSet};
 use genawaiter::sync::Gen;
 use itertools::Itertools;
-use rustc_hash::{FxHashMap, FxHashSet};
+
 use smallvec::SmallVec;
 use tap::Tap;
 
@@ -14,8 +15,8 @@ pub trait Automaton: Sized {
     fn start(&self) -> &u32;
     fn table_mut(&mut self) -> &mut Table;
     fn table(&self) -> &Table;
-    fn accepting_mut(&mut self) -> &mut FxHashSet<u32>;
-    fn accepting(&self) -> &FxHashSet<u32>;
+    fn accepting_mut(&mut self) -> &mut AHashSet<u32>;
+    fn accepting(&self) -> &AHashSet<u32>;
 
     /// Concatenates with another automaton
     fn concat(mut self, other: &Self) -> Self {
@@ -130,9 +131,9 @@ pub trait Automaton: Sized {
                 .collect(),
         );
         let mut dfs_stack = vec![*self.start()];
-        let mut seen = FxHashSet::default();
+        let mut seen = AHashSet::default();
         let mut new_table = Table::new();
-        let mut new_accepting = FxHashSet::default();
+        let mut new_accepting = AHashSet::default();
         while let Some(top) = dfs_stack.pop() {
             // dbg!(dfs_stack.len());
             let top = self.table().edge_closure(top, dubeps);
@@ -172,7 +173,7 @@ pub struct Nfa {
     start: u32,
     // transitions always "produce" epsilon
     table: Table,
-    accepting: FxHashSet<u32>,
+    accepting: AHashSet<u32>,
 }
 
 impl Automaton for Nfa {
@@ -192,11 +193,11 @@ impl Automaton for Nfa {
         &self.table
     }
 
-    fn accepting_mut(&mut self) -> &mut FxHashSet<u32> {
+    fn accepting_mut(&mut self) -> &mut AHashSet<u32> {
         &mut self.accepting
     }
 
-    fn accepting(&self) -> &FxHashSet<u32> {
+    fn accepting(&self) -> &AHashSet<u32> {
         &self.accepting
     }
 }
@@ -279,7 +280,7 @@ impl Nfa {
                 }
             }
         }
-        let mut new_accepting = FxHashSet::default();
+        let mut new_accepting = AHashSet::default();
         for a_accept in self.accepting.iter() {
             for b_accept in other.accepting.iter() {
                 new_accepting.insert(ab2c(*a_accept, *b_accept));
@@ -395,10 +396,10 @@ impl Nfa {
         let mut set_to_num = new_set2num();
         let new_start = set_to_num(once(self.start).collect());
         // DFA loop
-        let mut set_stack: Vec<FxHashSet<u32>> = vec![once(self.start).collect()];
-        let mut seen = FxHashSet::default();
+        let mut set_stack: Vec<AHashSet<u32>> = vec![once(self.start).collect()];
+        let mut seen = AHashSet::default();
         let mut new_table = Table::new();
-        let mut new_accepting = FxHashSet::default();
+        let mut new_accepting = AHashSet::default();
         let mut ctr = 0;
         while let Some(top_set) = set_stack.pop() {
             ctr += 1;
@@ -420,7 +421,7 @@ impl Nfa {
                 })
                 .unique()
             {
-                let next_set: FxHashSet<u32> = top_set
+                let next_set: AHashSet<u32> = top_set
                     .iter()
                     .copied()
                     .flat_map(|elem| {
@@ -525,7 +526,7 @@ impl From<&str> for Nfa {
 pub struct Nfst {
     start: u32,
     table: Table,
-    accepting: FxHashSet<u32>,
+    accepting: AHashSet<u32>,
 }
 
 impl Automaton for Nfst {
@@ -545,11 +546,11 @@ impl Automaton for Nfst {
         &self.table
     }
 
-    fn accepting_mut(&mut self) -> &mut FxHashSet<u32> {
+    fn accepting_mut(&mut self) -> &mut AHashSet<u32> {
         &mut self.accepting
     }
 
-    fn accepting(&self) -> &FxHashSet<u32> {
+    fn accepting(&self) -> &AHashSet<u32> {
         &self.accepting
     }
 }
@@ -568,7 +569,7 @@ impl Nfst {
     pub fn image_cross(&self, other: &Self) -> Self {
         let mut ab2c = new_ab2c();
         let mut table = Table::new();
-        let alphabet: FxHashSet<Option<Symbol>> = Symbol::SIGMA
+        let alphabet: AHashSet<Option<Symbol>> = Symbol::SIGMA
             .into_iter()
             .map(Some)
             .chain(std::iter::once(None))
@@ -594,7 +595,7 @@ impl Nfst {
             }
         }
 
-        let mut accepting = FxHashSet::default();
+        let mut accepting = AHashSet::default();
         for x in self.accepting.iter() {
             for y in other.accepting.iter() {
                 accepting.insert(ab2c(*x, *y));
@@ -614,7 +615,7 @@ impl Nfst {
         let mut ab2c = new_ab2c();
         // we go through the cartesian product of state ids
         let mut new_table = Table::new();
-        let mut seen = FxHashSet::default();
+        let mut seen = AHashSet::default();
         let mut dfs_stack = vec![(self.start, other.start)];
         let mut counter = 0;
         while let Some((i, j)) = dfs_stack.pop() {
@@ -657,7 +658,7 @@ impl Nfst {
             }
         }
 
-        let mut accepting_states = FxHashSet::default();
+        let mut accepting_states = AHashSet::default();
         for i in self.accepting.iter() {
             for j in other.accepting.iter() {
                 accepting_states.insert(ab2c(*i, *j));
@@ -750,7 +751,7 @@ impl Nfst {
 }
 
 fn new_set2num() -> impl FnMut(SmallVec<[u32; 4]>) -> u32 {
-    let mut tab = FxHashMap::default();
+    let mut tab = AHashMap::default();
     let mut counter = 0;
     move |mut a| {
         a.sort_unstable();
@@ -761,7 +762,7 @@ fn new_set2num() -> impl FnMut(SmallVec<[u32; 4]>) -> u32 {
     }
 }
 fn new_ab2c() -> impl FnMut(u32, u32) -> u32 {
-    let mut tab: FxHashMap<(u32, u32), u32> = FxHashMap::default();
+    let mut tab: AHashMap<(u32, u32), u32> = AHashMap::default();
     let mut counter = 0;
     move |a, b| {
         *tab.entry((a, b)).or_insert_with(|| {

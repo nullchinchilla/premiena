@@ -39,27 +39,18 @@ fn main() -> anyhow::Result<()> {
         infile.rules.reverse();
     }
     let rules = infile
-        .rules
+        .expand()?
         .par_iter()
         .map(|line| {
-            let s = shellexpand::env_with_context(&line, |s| {
-                Ok::<_, ExpandError>(Some(
-                    infile
-                        .variables
-                        .get(s)
-                        .map(|c| Cow::Owned(c.to_string()))
-                        .ok_or(ExpandError::UndefinedVariable)?,
-                ))
-            })?;
             let start = Instant::now();
-            let res = RewriteRule::from_line(s.trim())?.transduce(args.reverse);
-            eprintln!("{:?} took {:?}", s, start.elapsed());
+            let res = RewriteRule::from_line(line.trim())?.transduce(args.reverse);
+            eprintln!("{:?} took {:?}", line, start.elapsed());
             Ok(res)
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
     eprintln!("rules compiled!");
     for line in BufReader::new(stdin()).lines() {
-        let line = line?;
+        let line = format!("#{}#", line?);
         let mut line = Nfa::from(line.as_str());
         for rule in rules.iter() {
             line = rule(line).determinize_min();
@@ -67,9 +58,11 @@ fn main() -> anyhow::Result<()> {
         for res in line
             .lang_iter_utf8()
             // .filter(|l| l.chars().all(|c| c.is_ascii_alphabetic()))
-            .take(20)
+            .take(50)
         {
-            print!("{} ", res)
+            if res.starts_with('#') && res.ends_with('#') {
+                print!("{} ", res.trim_matches('#'))
+            }
         }
         println!();
     }
