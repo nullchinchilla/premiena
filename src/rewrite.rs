@@ -156,9 +156,9 @@ mod tests {
     #[test]
     fn simple_lenition() {
         let _ = env_logger::try_init();
-        let rr = RewriteRule::from_line("x > gz / %e_a").unwrap();
+        let rr = RewriteRule::from_line("x > gz / e_a").unwrap();
         let rule = rr.transduce(false);
-        // eprintln!("{}", rule.image_nfa().graphviz());
+        // eprintln!("{}", rule(Nfa::all()).graphviz());
         for s in rule("example".into()).lang_iter_utf8() {
             // if s.contains("h") {
             eprintln!("{:?}", s)

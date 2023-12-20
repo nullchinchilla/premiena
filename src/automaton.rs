@@ -575,9 +575,7 @@ impl Nfa {
         let mut step_ctr = 0;
         while let Some(top_set) = set_stack.pop() {
             step_ctr += 1;
-            if step_ctr > 1000 {
-                log::warn!("step {step_ctr} at {:?}", top_set);
-            }
+
             let top_num = set_to_num(top_set.iter().copied().collect());
             if !seen.insert(top_num) {
                 continue;
