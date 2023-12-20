@@ -46,6 +46,7 @@ impl Table {
 
     /// Double-epsilon closure
     pub fn dubeps_closure(&self, start: u32) -> AHashSet<u32> {
+        // self.edge_closure(start, |t| t.from_char.is_none() && t.to_char.is_none())
         let mut group = AHashSet::default();
         let mut dfs_stack = vec![start];
         while let Some(top) = dfs_stack.pop() {
