@@ -1,4 +1,8 @@
-use std::{collections::VecDeque, iter::once, time::Instant};
+use std::{
+    collections::VecDeque,
+    iter::once,
+    time::{Duration, Instant},
+};
 
 use ahash::{AHashMap, AHashSet};
 use genawaiter::sync::Gen;
@@ -7,7 +11,7 @@ use itertools::Itertools;
 use smallvec::SmallVec;
 use tap::Tap;
 
-use crate::table::{Symbol, Table, Transition};
+use crate::table::{Table, Transition};
 
 /// Trait for methods common to NFAs and NFSTs.
 pub trait Automaton: Sized {
@@ -122,11 +126,13 @@ pub trait Automaton: Sized {
 
     /// Remove all double-epsilon transitions.
     fn deepsilon(mut self) -> Self {
-        let dubeps = |e: &Transition| e.from_char.is_none() && e.to_char.is_none();
+        let start = Instant::now();
+        scopeguard::defer!(log::debug!("deepsilon took {:?}", start.elapsed()));
+
         let mut set_to_num = new_set2num();
         let new_start = set_to_num(
             self.table()
-                .edge_closure(*self.start(), dubeps)
+                .dubeps_closure(*self.start())
                 .into_iter()
                 .collect(),
         );
@@ -135,8 +141,7 @@ pub trait Automaton: Sized {
         let mut new_table = Table::new();
         let mut new_accepting = AHashSet::default();
         while let Some(top) = dfs_stack.pop() {
-            // dbg!(dfs_stack.len());
-            let top = self.table().edge_closure(top, dubeps);
+            let top = self.table().dubeps_closure(top);
             let top_no = set_to_num(top.iter().copied().collect());
             if top.iter().any(|t| self.accepting().contains(t)) {
                 new_accepting.insert(top_no);
@@ -149,7 +154,7 @@ pub trait Automaton: Sized {
                         }
                         let to = set_to_num(
                             self.table()
-                                .edge_closure(edge.to_state, dubeps)
+                                .dubeps_closure(edge.to_state)
                                 .into_iter()
                                 .collect(),
                         );
@@ -224,8 +229,7 @@ impl Nfa {
 
     /// A NFA that contains a single symbol
     pub fn sigma() -> Self {
-        Symbol::SIGMA
-            .into_iter()
+        (0..=u8::MAX)
             .fold(Self::null(), |a, b| a.union(&Self::single(b)))
             .determinize_min()
     }
@@ -247,7 +251,7 @@ impl Nfa {
     }
 
     /// A single symbol.
-    pub fn single(s: Symbol) -> Self {
+    pub fn single(s: u8) -> Self {
         let mut table = Table::new();
         table.insert(Transition {
             from_state: 0,
@@ -262,40 +266,102 @@ impl Nfa {
         }
     }
 
-    /// Intersect with another NFA.
-    pub fn intersect(mut self, other: &Self) -> Self {
-        self = self.determinize_min();
-        let other = other.clone().determinize_min();
-        let mut new_table = Table::new();
-        let mut ab2c = new_ab2c();
-        for atrans in self.table.iter() {
-            for btrans in other.table.iter() {
-                if atrans.from_char == btrans.from_char {
-                    new_table.insert(Transition {
-                        from_state: ab2c(atrans.from_state, btrans.from_state),
-                        to_state: ab2c(atrans.to_state, btrans.to_state),
-                        from_char: atrans.from_char,
-                        to_char: atrans.from_char,
-                    })
+    /// Compute the epsilon closure of a given state.
+    fn epsilon_closure(&self, state: u32) -> AHashSet<u32> {
+        let mut closure = AHashSet::new();
+        let mut stack = vec![state];
+
+        while let Some(s) = stack.pop() {
+            if closure.insert(s) {
+                // If the state is not already in the closure, add its epsilon transitions to the stack.
+                for (_, t) in self.table().transition(s, None) {
+                    stack.push(t);
                 }
             }
         }
-        let mut new_accepting = AHashSet::default();
-        for a_accept in self.accepting.iter() {
-            for b_accept in other.accepting.iter() {
-                new_accepting.insert(ab2c(*a_accept, *b_accept));
-            }
-        }
-        Self {
-            start: ab2c(self.start, other.start),
-            table: new_table,
-            accepting: new_accepting,
-        }
+
+        closure
     }
 
+    /// Intersect with another NFA using product construction including epsilon transitions.
+    pub fn intersect(self, other: &Self) -> Self {
+        // Create an empty NFA for the intersection.
+        let mut intersection = Nfa::null();
+
+        // Create a mapping between state pairs and new state IDs.
+        let mut ab2c = new_ab2c();
+
+        // Initialize queue with the epsilon closure of the start states.
+        let mut queue = VecDeque::new();
+        let start_closure1 = self.epsilon_closure(*self.start());
+        let start_closure2 = other.epsilon_closure(*other.start());
+        for &s1 in &start_closure1 {
+            for &s2 in &start_closure2 {
+                let start_pair = (s1, s2);
+                let start_state = ab2c(s1, s2);
+
+                queue.push_back(start_pair);
+
+                // Set the start state of the intersection NFA.
+                intersection.start = start_state;
+
+                // Handle accepting states.
+                if self.accepting().contains(&s1) && other.accepting().contains(&s2) {
+                    intersection.accepting_mut().insert(start_state);
+                }
+            }
+        }
+
+        // Process queue.
+        let mut processed = AHashSet::new();
+        while let Some((s1, s2)) = queue.pop_front() {
+            let closure1 = self.epsilon_closure(s1);
+            let closure2 = other.epsilon_closure(s2);
+
+            for a in (0..=u8::MAX).map(Some).chain(once(None)) {
+                for &c1 in &closure1 {
+                    for &c2 in &closure2 {
+                        let transitions1 = self.table().transition(c1, a);
+                        let transitions2 = other.table().transition(c2, a);
+
+                        for (_, t1_tostate) in transitions1.iter().copied() {
+                            for (_, t2_tostate) in transitions2.iter().copied() {
+                                let pair = (t1_tostate, t2_tostate);
+
+                                // Get or create state ID for the pair.
+                                let to_state = ab2c(t1_tostate, t2_tostate);
+
+                                // Add transition to the intersection NFA.
+                                intersection.table_mut().insert(Transition {
+                                    from_state: ab2c(s1, s2),
+                                    to_state,
+                                    from_char: a,
+                                    to_char: a,
+                                });
+
+                                // Add to queue if not already processed.
+                                if processed.insert(to_state) {
+                                    queue.push_back(pair);
+                                }
+
+                                // Handle accepting states.
+                                if self.accepting().contains(&t1_tostate)
+                                    && other.accepting().contains(&t2_tostate)
+                                {
+                                    intersection.accepting_mut().insert(to_state);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        intersection
+    }
     /// Complement of this NFA
     pub fn complement(mut self) -> Self {
-        self = self.determinize().complete();
+        self = self.determinize_min().complete();
         self.accepting = self
             .table
             .states()
@@ -306,17 +372,14 @@ impl Nfa {
     }
 
     /// Subtract another NFA from this NFA.
-    pub fn subtract(mut self, other: &Nfa) -> Self {
+    pub fn subtract(self, other: &Nfa) -> Self {
         self.intersect(&other.clone().complement())
     }
 
     /// Helper function to create an NFA based on a bunch of bytes
     pub fn from_bytes(b: &[u8]) -> Self {
         b.iter()
-            .map(|b| {
-                let [a, b] = Symbol::from_byte(*b);
-                Self::single(a).concat(&Self::single(b))
-            })
+            .map(|b| Self::single(*b))
             .fold(Self::empty(), |a, b| a.concat(&b))
     }
 
@@ -372,7 +435,7 @@ impl Nfa {
             .chain(once(garbage_state))
             .chain(once(self.start))
         {
-            for ch in Symbol::SIGMA {
+            for ch in 0..=u8::MAX {
                 if self.table.transition(state, Some(ch)).is_empty() {
                     self.table.insert(Transition {
                         from_state: state,
@@ -385,6 +448,85 @@ impl Nfa {
         }
         self
     }
+
+    // /// Convert into a DFA./// Convert into a DFA.
+    // pub fn determinize(mut self) -> Self {
+    //     self = self.deepsilon();
+    //     let start = Instant::now();
+    //     let pre_det = self.table.states().len();
+    //     // Create a new NFA to represent the DFA.
+    //     let mut dfa = Nfa::null();
+    //     let mut set_to_num = new_set2num();
+    //     let mut unmarked_states = VecDeque::new();
+    //     let mut processed_states: AHashSet<u32> = AHashSet::new();
+
+    //     // Start with the epsilon-closure of the NFA's start state.
+    //     let start_closure: AHashSet<u32> =
+    //         self.epsilon_closure(*self.start()).into_iter().collect();
+    //     let start_state = set_to_num(start_closure.iter().copied().collect());
+    //     unmarked_states.push_back(start_closure);
+    //     dfa.start = start_state;
+    //     processed_states.insert(start_state);
+
+    //     let mut step_ctr = 0;
+
+    //     while let Some(states) = unmarked_states.pop_front() {
+    //         step_ctr += 1;
+    //         // dbg!(&states);
+    //         let dfa_state = set_to_num(states.iter().copied().collect());
+
+    //         // If any of the NFA states are accepting, the DFA state is accepting.
+    //         for &state in &states {
+    //             if self.accepting().contains(&state) {
+    //                 dfa.accepting_mut().insert(dfa_state);
+    //                 break;
+    //             }
+    //         }
+
+    //         for input in (0..=u8::MAX).map(Some).chain(std::iter::once(None)) {
+    //             let mut next_states_set: AHashSet<u32> = AHashSet::new();
+
+    //             // Compute the epsilon-closure of the move set for the current symbol.
+    //             for &state in &states {
+    //                 let transitions = self.table().transition(state, input);
+    //                 for (_, dest_state) in transitions {
+    //                     next_states_set.extend(self.epsilon_closure(dest_state));
+    //                 }
+    //             }
+
+    //             let next_states: AHashSet<_> = next_states_set.into_iter().collect();
+    //             if !next_states.is_empty() {
+    //                 let next_state_num = set_to_num(next_states.iter().copied().collect());
+
+    //                 // Check if this set of states is already processed.
+    //                 if !processed_states.contains(&next_state_num) {
+    //                     // Add the transition to the DFA.
+    //                     dfa.table_mut().insert(Transition {
+    //                         from_state: dfa_state,
+    //                         to_state: next_state_num,
+    //                         from_char: input,
+    //                         to_char: input,
+    //                     });
+
+    //                     unmarked_states.push_back(next_states);
+    //                     processed_states.insert(next_state_num);
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     if start.elapsed() > Duration::from_millis(50) {
+    //         log::warn!(
+    //             "determinize {} => {} took {} steps ({:?})",
+    //             pre_det,
+    //             dfa.table.states().len(),
+    //             step_ctr,
+    //             start.elapsed()
+    //         );
+    //     }
+
+    //     dfa
+    // }
 
     /// Convert into a DFA.
     pub fn determinize(mut self) -> Self {
@@ -403,6 +545,9 @@ impl Nfa {
         let mut step_ctr = 0;
         while let Some(top_set) = set_stack.pop() {
             step_ctr += 1;
+            if step_ctr > 1000 {
+                log::warn!("step {step_ctr} at {:?}", top_set);
+            }
             let top_num = set_to_num(top_set.iter().copied().collect());
             if !seen.insert(top_num) {
                 continue;
@@ -442,13 +587,16 @@ impl Nfa {
                 }
             }
         }
-        log::debug!(
-            "determinize {} => {} took {} steps ({:?})",
-            pre_det,
-            new_table.states().len(),
-            step_ctr,
-            start.elapsed()
-        );
+
+        if start.elapsed() > Duration::from_millis(50) {
+            log::warn!(
+                "determinize {} => {} took {} steps ({:?})",
+                pre_det,
+                new_table.states().len(),
+                step_ctr,
+                start.elapsed()
+            );
+        }
 
         Self {
             start: new_start,
@@ -463,7 +611,7 @@ impl Nfa {
     }
 
     /// Iterates through the regular language described by this NFA.
-    pub fn lang_iter(&self) -> impl Iterator<Item = Vec<Symbol>> + '_ {
+    pub fn lang_iter(&self) -> impl Iterator<Item = Vec<u8>> + '_ {
         let this = self.clone().deepsilon();
         let mut bfs_queue = VecDeque::new();
         bfs_queue.push_back((this.start, vec![]));
@@ -492,18 +640,7 @@ impl Nfa {
 
     /// Helper function that iterates through the UTF-8 strings described by this NFA.
     pub fn lang_iter_utf8(&self) -> impl Iterator<Item = String> + '_ {
-        self.lang_iter().filter_map(|s| {
-            let hex_str = s.into_iter().fold(String::new(), |mut s, sym| {
-                s.push_str(&sym.to_string());
-                s
-            });
-            if hex_str.len() % 2 == 0 {
-                let bts = hex::decode(&hex_str).expect("non-hex string?!");
-                Some(String::from_utf8(bts).ok()?)
-            } else {
-                None
-            }
-        })
+        self.lang_iter().filter_map(|s| String::from_utf8(s).ok())
     }
 }
 
@@ -567,8 +704,7 @@ impl Nfst {
     pub fn image_cross(&self, other: &Self) -> Self {
         let mut ab2c = new_ab2c();
         let mut table = Table::new();
-        let alphabet: AHashSet<Option<Symbol>> = Symbol::SIGMA
-            .into_iter()
+        let alphabet: AHashSet<Option<u8>> = (0..=u8::MAX)
             .map(Some)
             .chain(std::iter::once(None))
             .collect();
@@ -631,7 +767,7 @@ impl Nfst {
                 });
                 dfs_stack.push((i, second_stage.1));
             }
-            for ch in Symbol::SIGMA.into_iter().map(Some).chain(once(None)) {
+            for ch in (0..=u8::MAX).map(Some).chain(once(None)) {
                 for first_stage in self.table.transition(i, ch) {
                     for second_stage in other.table.transition(j, first_stage.0) {
                         new_table.insert(Transition {

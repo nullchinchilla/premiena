@@ -4,23 +4,25 @@ categories:
   C: [p, t, k, b, d, g, w, z, s, r, l, m, y, h, f]
   L: [ā, ē, ī, ō, ū]
 
+source: (C|(CV))*
+
 rules:
   - p > w / V_V
-  - w > / _u
+  # - w > / _u
 
-  - eu > yō / _
-  - au > ō / _
-  - ou > ō / _
-  - iu > yū / _
+  # - eu > yō / _
+  # - au > ō / _
+  # - ou > ō / _
+  # - iu > yū / _
 
-  - p > h / _V
-  - h > f / _u
-  - t > ch / _i
-  - t > ts / _u
-  - s > sh / _i
-  - z > j / _i
-  - d > j / _i
-  - d > z / _u
-  - zy > j / _
-  - ty > ch / _
-  - n > m / _(p|m|b)
+  # - p > h / _V
+  # - h > f / _u
+  # - t > ch / _i
+  # - t > ts / _u
+  # - s > sh / _i
+  # - z > j / _i
+  # - d > j / _i
+  # - d > z / _u
+  # - zy > j / _
+  # - ty > ch / _
+  # - n > m / _(p|m|b)

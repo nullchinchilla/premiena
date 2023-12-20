@@ -3,108 +3,13 @@ use std::fmt::Display;
 use ahash::{AHashMap, AHashSet};
 use tap::Tap;
 
-/// A single, hex symbol
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord, Eq, Hash)]
-pub enum Symbol {
-    S0,
-    S1,
-    S2,
-    S3,
-    S4,
-    S5,
-    S6,
-    S7,
-    S8,
-    S9,
-    Sa,
-    Sb,
-    Sc,
-    Sd,
-    Se,
-    Sf,
-}
-
-impl Symbol {
-    /// Alphabet of all possible symbols.
-    pub const SIGMA: [Symbol; 16] = [
-        Symbol::S0,
-        Symbol::S1,
-        Symbol::S2,
-        Symbol::S3,
-        Symbol::S4,
-        Symbol::S5,
-        Symbol::S6,
-        Symbol::S7,
-        Symbol::S8,
-        Symbol::S9,
-        Symbol::Sa,
-        Symbol::Sb,
-        Symbol::Sc,
-        Symbol::Sd,
-        Symbol::Se,
-        Symbol::Sf,
-    ];
-
-    fn from_hexdigit(b: u8) -> Self {
-        match b {
-            0x0 => Self::S0,
-            0x1 => Self::S1,
-            0x2 => Self::S2,
-            0x3 => Self::S3,
-            0x4 => Self::S4,
-            0x5 => Self::S5,
-            0x6 => Self::S6,
-            0x7 => Self::S7,
-            0x8 => Self::S8,
-            0x9 => Self::S9,
-            0xa => Self::Sa,
-            0xb => Self::Sb,
-            0xc => Self::Sc,
-            0xd => Self::Sd,
-            0xe => Self::Se,
-            0xf => Self::Sf,
-            _ => panic!("not a hex digit"),
-        }
-    }
-
-    /// Convert a single byte.
-    pub fn from_byte(bayt: u8) -> [Self; 2] {
-        let a = (bayt & 0b11110000) >> 4;
-        let b = bayt & 0b00001111;
-        [Self::from_hexdigit(a), Self::from_hexdigit(b)]
-    }
-}
-
-impl Display for Symbol {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Symbol::S0 => "0".fmt(f),
-            Symbol::S1 => "1".fmt(f),
-            Symbol::S2 => "2".fmt(f),
-            Symbol::S3 => "3".fmt(f),
-            Symbol::S4 => "4".fmt(f),
-            Symbol::S5 => "5".fmt(f),
-            Symbol::S6 => "6".fmt(f),
-            Symbol::S7 => "7".fmt(f),
-            Symbol::S8 => "8".fmt(f),
-            Symbol::S9 => "9".fmt(f),
-            Symbol::Sa => "a".fmt(f),
-            Symbol::Sb => "b".fmt(f),
-            Symbol::Sc => "c".fmt(f),
-            Symbol::Sd => "d".fmt(f),
-            Symbol::Se => "e".fmt(f),
-            Symbol::Sf => "f".fmt(f),
-        }
-    }
-}
-
 /// A single transition.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Transition {
     pub from_state: u32,
     pub to_state: u32,
-    pub from_char: Option<Symbol>,
-    pub to_char: Option<Symbol>,
+    pub from_char: Option<u8>,
+    pub to_char: Option<u8>,
 }
 
 /// A transition table with good asymptotic performance, supporting multiple kinds of queries.
@@ -112,8 +17,8 @@ pub struct Transition {
 #[derive(Clone)]
 pub struct Table {
     // state -> (char -> setof outchar, state)
-    forwards: AHashMap<u32, AHashMap<Option<Symbol>, AHashSet<(Option<Symbol>, u32)>>>,
-    backwards: AHashMap<u32, AHashMap<Option<Symbol>, AHashSet<(Option<Symbol>, u32)>>>,
+    forwards: AHashMap<u32, AHashMap<Option<u8>, AHashSet<(Option<u8>, u32)>>>,
+    backwards: AHashMap<u32, AHashMap<Option<u8>, AHashSet<(Option<u8>, u32)>>>,
 }
 
 impl Table {
@@ -139,16 +44,35 @@ impl Table {
         self.states().into_iter().max().unwrap_or_default() + 1
     }
 
-    /// Closure, given a particular predicate
-    pub fn edge_closure(&self, start: u32, pred: impl Fn(&Transition) -> bool) -> AHashSet<u32> {
+    /// Double-epsilon closure
+    pub fn dubeps_closure(&self, start: u32) -> AHashSet<u32> {
         let mut group = AHashSet::default();
-        let mut dfa_stack = vec![start];
-        while let Some(top) = dfa_stack.pop() {
+        let mut dfs_stack = vec![start];
+        while let Some(top) = dfs_stack.pop() {
+            group.insert(top);
+            if let Some(single_epsilon_neighs) =
+                self.forwards.get(&top).and_then(|top| top.get(&None))
+            {
+                for (other, neigh) in single_epsilon_neighs {
+                    if other.is_none() && group.insert(*neigh) {
+                        dfs_stack.push(*neigh)
+                    }
+                }
+            }
+        }
+        group
+    }
+
+    /// Closure, given a particular predicate
+    fn edge_closure(&self, start: u32, pred: impl Fn(&Transition) -> bool) -> AHashSet<u32> {
+        let mut group = AHashSet::default();
+        let mut dfs_stack = vec![start];
+        while let Some(top) = dfs_stack.pop() {
             group.insert(top);
             let neighs = self.outgoing_edges(top);
             for neigh in neighs.into_iter().filter(&pred) {
                 if group.insert(neigh.to_state) {
-                    dfa_stack.push(neigh.to_state);
+                    dfs_stack.push(neigh.to_state);
                 }
             }
         }
@@ -175,9 +99,9 @@ impl Table {
     pub fn transition(
         &self,
         state: u32,
-        input: impl Into<Option<Symbol>>,
-    ) -> AHashSet<(Option<Symbol>, u32)> {
-        let input: Option<Symbol> = input.into();
+        input: impl Into<Option<u8>>,
+    ) -> AHashSet<(Option<u8>, u32)> {
+        let input: Option<u8> = input.into();
         let mut res = if let Some(val) = self.forwards.get(&state) {
             if let Some(val) = val.get(&input) {
                 val.clone()
