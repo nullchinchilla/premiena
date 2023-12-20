@@ -400,9 +400,9 @@ impl Nfa {
         let mut seen = AHashSet::default();
         let mut new_table = Table::new();
         let mut new_accepting = AHashSet::default();
-        let mut ctr = 0;
+        let mut step_ctr = 0;
         while let Some(top_set) = set_stack.pop() {
-            ctr += 1;
+            step_ctr += 1;
             let top_num = set_to_num(top_set.iter().copied().collect());
             if !seen.insert(top_num) {
                 continue;
@@ -416,7 +416,6 @@ impl Nfa {
                 .flat_map(|elem| {
                     self.table
                         .outgoing_edges(elem)
-                        .into_iter()
                         .map(|e| e.from_char.unwrap())
                 })
                 .unique()
@@ -443,15 +442,14 @@ impl Nfa {
                 }
             }
         }
-        if start.elapsed().as_secs_f64() > 1.0 {
-            log::warn!(
-                "determinize {} => {} took {} steps ({:?})",
-                pre_det,
-                new_table.states().len(),
-                ctr,
-                start.elapsed()
-            );
-        }
+        log::debug!(
+            "determinize {} => {} took {} steps ({:?})",
+            pre_det,
+            new_table.states().len(),
+            step_ctr,
+            start.elapsed()
+        );
+
         Self {
             start: new_start,
             table: new_table,

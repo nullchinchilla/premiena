@@ -32,7 +32,7 @@ fn main() -> anyhow::Result<()> {
     }
     let (source, rules) = infile.expand()?;
     let rules = rules
-        .par_iter()
+        .iter()
         .map(|line| {
             let start = Instant::now();
             let res = RewriteRule::from_line(line.trim())?.transduce(args.reverse);
