@@ -9,12 +9,13 @@ use serde::{Deserialize, Serialize};
 pub struct ScFile {
     #[serde(default)]
     pub categories: BTreeMap<String, Vec<String>>,
+    pub source: String,
     pub rules: Vec<String>,
 }
 
 impl ScFile {
     /// Expand all the categories.
-    pub fn expand(&self) -> anyhow::Result<Vec<String>> {
+    pub fn expand(&self) -> anyhow::Result<(String, Vec<String>)> {
         let mut toret = vec![];
         for rule in self.rules.iter() {
             let (rule, context) = rule
@@ -52,7 +53,15 @@ impl ScFile {
                 }
             }
         }
-        Ok(toret)
+        Ok((
+            self.categories.iter().fold(
+                self.source.to_string(),
+                |source, (cat_name, cat_contents)| {
+                    source.replace(cat_name, &cat_to_regex(cat_contents))
+                },
+            ),
+            toret,
+        ))
     }
 }
 

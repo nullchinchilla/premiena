@@ -5,8 +5,8 @@ use once_cell::sync::Lazy;
 
 use crate::automaton::{Automaton, Nfa, Nfst};
 
-use self::helpers::{left_context, regex_to_nfa, right_context, NfaExt};
-
+use self::helpers::{left_context, right_context, NfaExt};
+pub use helpers::regex_to_nfa;
 mod helpers;
 
 /// A rewrite rule.
@@ -33,6 +33,7 @@ impl RewriteRule {
 
     /// Generate the transducer corresponding to thie rewrite rule
     pub fn transduce(&self, reverse: bool) -> impl Fn(Nfa) -> Nfa {
+        let start = Instant::now();
         static LI: Lazy<Nfa> = Lazy::new(|| Nfa::from("["));
         static LA: Lazy<Nfa> = Lazy::new(|| Nfa::from("<"));
         static LC: Lazy<Nfa> = Lazy::new(|| Nfa::from("("));
@@ -79,14 +80,19 @@ impl RewriteRule {
                 .complement()
                 .determinize_min()
         };
+        log::trace!("by obligatory: {:?}", start.elapsed());
 
         let left_context = left_context(&SIGMA, &self.left_ctx, &LEFT, &RIGHT).determinize_min();
         let right_context = right_context(&SIGMA, &self.right_ctx, &LEFT, &RIGHT).determinize_min();
+        log::trace!("by LR contexts: {:?}", start.elapsed());
 
-        let context = left_context.intersect(&right_context).determinize_min();
+        let context = left_context.intersect(&right_context);
+        log::trace!("by unified context: {:?}", start.elapsed());
+
         let oblig = obligatory(&self.pre, &LI, &RIGHT)
             .intersect(&obligatory(&self.pre, &LEFT, &RI))
             .determinize_min();
+        log::trace!("by obligatory + leftright: {:?}", start.elapsed());
 
         let sigma_i_0_star = Nfa::all()
             .concat(&LA.clone().union(&LC).union(&RA).union(&RC))
@@ -94,6 +100,7 @@ impl RewriteRule {
             .complement()
             .int_bytes()
             .determinize_min();
+        log::trace!("by sigmastar: {:?}", start.elapsed());
 
         let inner_replace = Nfst::id_nfa(sigma_i_0_star)
             .concat(
@@ -119,8 +126,12 @@ impl RewriteRule {
             )
             .star()
             .deepsilon();
+        log::trace!("by inner_replace: {:?}", start.elapsed());
+
         let replace =
             Nfst::id_nfa(context.intersect(&oblig).determinize_min()).compose(&inner_replace);
+        log::trace!("by replace: {:?}", start.elapsed());
+
         let replace = if reverse { replace.inverse() } else { replace };
         move |input| {
             let pre_replace = Nfst::id_nfa(

@@ -1,15 +1,13 @@
-use anyhow::Context;
 use argh::FromArgs;
-use premiena::{Nfa, RewriteRule};
+use premiena::{regex_to_nfa, Nfa, RewriteRule};
 use rayon::prelude::*;
 use scfile::ScFile;
 use std::{
-    borrow::Cow,
     io::{stdin, BufRead, BufReader},
     path::PathBuf,
     time::Instant,
 };
-use thiserror::Error;
+
 mod scfile;
 
 #[derive(FromArgs)]
@@ -24,12 +22,6 @@ struct Args {
     reverse: bool,
 }
 
-#[derive(Error, Debug)]
-enum ExpandError {
-    #[error("cannot find variable")]
-    UndefinedVariable,
-}
-
 fn main() -> anyhow::Result<()> {
     env_logger::init();
     let args: Args = argh::from_env();
@@ -38,23 +30,28 @@ fn main() -> anyhow::Result<()> {
     if args.reverse {
         infile.rules.reverse();
     }
-    let rules = infile
-        .expand()?
+    let (source, rules) = infile.expand()?;
+    let rules = rules
         .par_iter()
         .map(|line| {
             let start = Instant::now();
             let res = RewriteRule::from_line(line.trim())?.transduce(args.reverse);
-            eprintln!("{:?} took {:?}", line, start.elapsed());
+            log::debug!("{:?} took {:?}", line, start.elapsed());
             Ok(res)
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
-    eprintln!("rules compiled!");
+    log::debug!("rules compiled!");
     for line in BufReader::new(stdin()).lines() {
         let line = format!("#{}#", line?);
         let mut line = Nfa::from(line.as_str());
         for rule in rules.iter() {
             line = rule(line).determinize_min();
         }
+
+        if args.reverse {
+            line = line.intersect(&regex_to_nfa(&format!("#{}#", source))?)
+        }
+
         for res in line
             .lang_iter_utf8()
             // .filter(|l| l.chars().all(|c| c.is_ascii_alphabetic()))
