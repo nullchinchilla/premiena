@@ -49,12 +49,7 @@ impl RewriteRule {
         static EMM: Lazy<Nfa> = Lazy::new(|| LEFT.clone().union(&RIGHT.clone()));
         static EMM_0: Lazy<Nfa> = Lazy::new(|| EMM.clone().union(&Nfa::from("0")));
 
-        static SIGMA: Lazy<Nfa> = Lazy::new(|| {
-            Nfa::sigma()
-                .concat(&Nfa::sigma())
-                .subtract(&EMM_0)
-                .determinize_min()
-        });
+        static SIGMA: Lazy<Nfa> = Lazy::new(|| Nfa::sigma().subtract(&EMM_0).determinize_min());
 
         // static NO_WINGS: Lazy<Nfa> =
         //     Lazy::new(|| Nfa::all().concat(&EMM_0).concat(&Nfa::all()).complement());
@@ -72,11 +67,10 @@ impl RewriteRule {
 
         let obligatory = |phi: &Nfa, left: &Nfa, right: &Nfa| {
             Nfa::all()
-                .int_bytes()
                 .concat(left)
                 .concat(&phi.clone().ignore(&EMM_0).determinize())
                 .concat(right)
-                .concat(&Nfa::all().int_bytes())
+                .concat(&Nfa::all())
                 .complement()
                 .determinize_min()
         };
@@ -98,7 +92,6 @@ impl RewriteRule {
             .concat(&LA.clone().union(&LC).union(&RA).union(&RC))
             .concat(&Nfa::all())
             .complement()
-            .int_bytes()
             .determinize_min();
         log::trace!("by sigmastar: {:?}", start.elapsed());
 
@@ -133,19 +126,24 @@ impl RewriteRule {
         log::trace!("by replace: {:?}", start.elapsed());
 
         let replace = if reverse { replace.inverse() } else { replace };
-        move |input| {
-            let pre_replace = Nfst::id_nfa(
-                Nfst::id_nfa(input.determinize_min())
-                    .compose(&PROLOGUE)
-                    .image_nfa()
-                    .determinize_min(),
-            );
-            let post_replace = pre_replace.compose(&replace).image_nfa().determinize_min();
 
-            Nfst::id_nfa(post_replace)
-                .compose(&PROLOGUE.clone().inverse())
+        move |input| {
+            Nfst::id_nfa(input)
+                .compose(&inner_replace)
                 .image_nfa()
                 .determinize_min()
+            // let pre_replace = Nfst::id_nfa(
+            //     Nfst::id_nfa(input.determinize_min())
+            //         .compose(&PROLOGUE)
+            //         .image_nfa()
+            //         .determinize_min(),
+            // );
+            // let post_replace = pre_replace.compose(&replace).image_nfa().determinize_min();
+
+            // Nfst::id_nfa(post_replace)
+            //     .compose(&PROLOGUE.clone().inverse())
+            //     .image_nfa()
+            //     .determinize_min()
         }
     }
 }
@@ -159,7 +157,7 @@ mod tests {
         let rr = RewriteRule::from_line("x > gz / e_a").unwrap();
         let rule = rr.transduce(false);
         // eprintln!("{}", rule(Nfa::all()).graphviz());
-        for s in rule("example".into()).lang_iter_utf8() {
+        for s in rule("x".into()).lang_iter_utf8() {
             // if s.contains("h") {
             eprintln!("{:?}", s)
             // }

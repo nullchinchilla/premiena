@@ -44,7 +44,6 @@ fn hir_to_nfa(hir: &Hir) -> anyhow::Result<Nfa> {
 pub trait NfaExt {
     fn intro(self) -> Nfst;
     fn ignore(self, other: &Nfa) -> Nfa;
-    fn int_bytes(self) -> Nfa;
 }
 
 impl NfaExt for Nfa {
@@ -59,10 +58,6 @@ impl NfaExt for Nfa {
         Nfst::id_nfa(Nfa::sigma().concat(&Nfa::sigma()))
             .union(&Nfst::id_nfa(Nfa::empty()).image_cross(&s).star())
             .star()
-    }
-
-    fn int_bytes(self) -> Nfa {
-        self.intersect(&Nfa::sigma().concat(&Nfa::sigma()).star())
     }
 }
 
@@ -107,16 +102,14 @@ pub fn left_context(sigma: &Nfa, lambda: &Nfa, left: &Nfa, right: &Nfa) -> Nfa {
             .star()
     } else {
         pre_iff_suf(
-            &Nfa::all()
-                .concat(
-                    &lambda
-                        .clone()
-                        .ignore(right)
-                        .determinize_min()
-                        .ignore(&"0".into()),
-                )
-                .int_bytes(),
-            &left.clone().concat(&Nfa::all()).int_bytes(),
+            &Nfa::all().concat(
+                &lambda
+                    .clone()
+                    .ignore(right)
+                    .determinize_min()
+                    .ignore(&"0".into()),
+            ),
+            &left.clone().concat(&Nfa::all()),
         )
     }
 }
@@ -149,12 +142,11 @@ pub fn right_context(sigma: &Nfa, rho: &Nfa, left: &Nfa, right: &Nfa) -> Nfa {
             .star()
     } else {
         pre_iff_suf(
-            &Nfa::all().concat(right).int_bytes(),
+            &Nfa::all().concat(right),
             &rho.clone()
                 .ignore(left)
                 .ignore(&"0".into())
-                .concat(&Nfa::all())
-                .int_bytes(),
+                .concat(&Nfa::all()),
         )
     }
 }
