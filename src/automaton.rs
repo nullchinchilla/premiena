@@ -8,6 +8,7 @@ use ahash::{AHashMap, AHashSet};
 use genawaiter::sync::Gen;
 use itertools::Itertools;
 
+use once_cell::sync::Lazy;
 use smallvec::SmallVec;
 use tap::Tap;
 
@@ -126,8 +127,8 @@ pub trait Automaton: Sized {
 
     /// Remove all double-epsilon transitions.
     fn deepsilon(mut self) -> Self {
-        let start = Instant::now();
-        scopeguard::defer!(log::debug!("deepsilon took {:?}", start.elapsed()));
+        // let start = Instant::now();
+        // scopeguard::defer!(log::debug!("deepsilon took {:?}", start.elapsed()));
 
         let mut set_to_num = new_set2num();
         let new_start = set_to_num(
@@ -229,9 +230,12 @@ impl Nfa {
 
     /// A NFA that contains a single symbol
     pub fn sigma() -> Self {
-        (0..=u8::MAX)
-            .fold(Self::null(), |a, b| a.union(&Self::single(b)))
-            .determinize_min()
+        static SIGMA: Lazy<Nfa> = Lazy::new(|| {
+            (0..=u8::MAX)
+                .fold(Nfa::null(), |a, b| a.union(&Nfa::single(b)))
+                .determinize_min()
+        });
+        SIGMA.clone()
     }
 
     /// An NFA that contains only the empty string.
@@ -283,112 +287,113 @@ impl Nfa {
         closure
     }
 
-    pub fn intersect(mut self, other: &Self) -> Self {
-        self = self.determinize_min();
-        let other = other.clone().determinize_min();
-        let mut new_table = Table::new();
+    // pub fn intersect(mut self, other: &Self) -> Self {
+    //     self = self.determinize_min();
+    //     let other = other.clone().determinize_min();
+    //     let mut new_table = Table::new();
+    //     let mut ab2c = new_ab2c();
+    //     for atrans in self.table.iter() {
+    //         for btrans in other.table.iter() {
+    //             if atrans.from_char == btrans.from_char {
+    //                 new_table.insert(Transition {
+    //                     from_state: ab2c(atrans.from_state, btrans.from_state),
+    //                     to_state: ab2c(atrans.to_state, btrans.to_state),
+    //                     from_char: atrans.from_char,
+    //                     to_char: atrans.from_char,
+    //                 })
+    //             }
+    //         }
+    //     }
+    //     let mut new_accepting = AHashSet::default();
+    //     for a_accept in self.accepting.iter() {
+    //         for b_accept in other.accepting.iter() {
+    //             new_accepting.insert(ab2c(*a_accept, *b_accept));
+    //         }
+    //     }
+    //     Self {
+    //         start: ab2c(self.start, other.start),
+    //         table: new_table,
+    //         accepting: new_accepting,
+    //     }
+    // }
+
+    /// Intersect with another NFA using product construction including epsilon transitions.
+    pub fn intersect(self, other: &Self) -> Self {
+        // Create an empty NFA for the intersection.
+        let mut intersection = Nfa::null();
+
+        // Create a mapping between state pairs and new state IDs.
         let mut ab2c = new_ab2c();
-        for atrans in self.table.iter() {
-            for btrans in other.table.iter() {
-                if atrans.from_char == btrans.from_char {
-                    new_table.insert(Transition {
-                        from_state: ab2c(atrans.from_state, btrans.from_state),
-                        to_state: ab2c(atrans.to_state, btrans.to_state),
-                        from_char: atrans.from_char,
-                        to_char: atrans.from_char,
-                    })
+
+        // Initialize queue with the epsilon closure of the start states.
+        let mut queue = VecDeque::new();
+        let start_closure1 = self.epsilon_closure(*self.start());
+        let start_closure2 = other.epsilon_closure(*other.start());
+        for &s1 in &start_closure1 {
+            for &s2 in &start_closure2 {
+                let start_pair = (s1, s2);
+                let start_state = ab2c(s1, s2);
+
+                queue.push_back(start_pair);
+
+                // Set the start state of the intersection NFA.
+                intersection.start = start_state;
+
+                // Handle accepting states.
+                if self.accepting().contains(&s1) && other.accepting().contains(&s2) {
+                    intersection.accepting_mut().insert(start_state);
                 }
             }
         }
-        let mut new_accepting = AHashSet::default();
-        for a_accept in self.accepting.iter() {
-            for b_accept in other.accepting.iter() {
-                new_accepting.insert(ab2c(*a_accept, *b_accept));
+
+        // Process queue.
+        let mut processed = AHashSet::new();
+        while let Some((s1, s2)) = queue.pop_front() {
+            let closure1 = self.epsilon_closure(s1);
+            let closure2 = other.epsilon_closure(s2);
+
+            for a in (0..=u8::MAX).map(Some).chain(once(None)) {
+                for &c1 in &closure1 {
+                    for &c2 in &closure2 {
+                        let transitions1 = self.table().transition(c1, a);
+
+                        for (_, t1_tostate) in transitions1 {
+                            let transitions2 = other.table().transition(c2, a);
+                            for (_, t2_tostate) in transitions2 {
+                                let pair = (t1_tostate, t2_tostate);
+
+                                // Get or create state ID for the pair.
+                                let to_state = ab2c(t1_tostate, t2_tostate);
+
+                                // Add transition to the intersection NFA.
+                                intersection.table_mut().insert(Transition {
+                                    from_state: ab2c(s1, s2),
+                                    to_state,
+                                    from_char: a,
+                                    to_char: a,
+                                });
+
+                                // Add to queue if not already processed.
+                                if processed.insert(to_state) {
+                                    queue.push_back(pair);
+                                }
+
+                                // Handle accepting states.
+                                if self.accepting().contains(&t1_tostate)
+                                    && other.accepting().contains(&t2_tostate)
+                                {
+                                    intersection.accepting_mut().insert(to_state);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
-        Self {
-            start: ab2c(self.start, other.start),
-            table: new_table,
-            accepting: new_accepting,
-        }
+
+        intersection
     }
 
-    // /// Intersect with another NFA using product construction including epsilon transitions.
-    // pub fn intersect(self, other: &Self) -> Self {
-    //     // Create an empty NFA for the intersection.
-    //     let mut intersection = Nfa::null();
-
-    //     // Create a mapping between state pairs and new state IDs.
-    //     let mut ab2c = new_ab2c();
-
-    //     // Initialize queue with the epsilon closure of the start states.
-    //     let mut queue = VecDeque::new();
-    //     let start_closure1 = self.epsilon_closure(*self.start());
-    //     let start_closure2 = other.epsilon_closure(*other.start());
-    //     for &s1 in &start_closure1 {
-    //         for &s2 in &start_closure2 {
-    //             let start_pair = (s1, s2);
-    //             let start_state = ab2c(s1, s2);
-
-    //             queue.push_back(start_pair);
-
-    //             // Set the start state of the intersection NFA.
-    //             intersection.start = start_state;
-
-    //             // Handle accepting states.
-    //             if self.accepting().contains(&s1) && other.accepting().contains(&s2) {
-    //                 intersection.accepting_mut().insert(start_state);
-    //             }
-    //         }
-    //     }
-
-    //     // Process queue.
-    //     let mut processed = AHashSet::new();
-    //     while let Some((s1, s2)) = queue.pop_front() {
-    //         let closure1 = self.epsilon_closure(s1);
-    //         let closure2 = other.epsilon_closure(s2);
-
-    //         for a in (0..=u8::MAX).map(Some).chain(once(None)) {
-    //             for &c1 in &closure1 {
-    //                 for &c2 in &closure2 {
-    //                     let transitions1 = self.table().transition(c1, a);
-    //                     let transitions2 = other.table().transition(c2, a);
-
-    //                     for (_, t1_tostate) in transitions1.iter().copied() {
-    //                         for (_, t2_tostate) in transitions2.iter().copied() {
-    //                             let pair = (t1_tostate, t2_tostate);
-
-    //                             // Get or create state ID for the pair.
-    //                             let to_state = ab2c(t1_tostate, t2_tostate);
-
-    //                             // Add transition to the intersection NFA.
-    //                             intersection.table_mut().insert(Transition {
-    //                                 from_state: ab2c(s1, s2),
-    //                                 to_state,
-    //                                 from_char: a,
-    //                                 to_char: a,
-    //                             });
-
-    //                             // Add to queue if not already processed.
-    //                             if processed.insert(to_state) {
-    //                                 queue.push_back(pair);
-    //                             }
-
-    //                             // Handle accepting states.
-    //                             if self.accepting().contains(&t1_tostate)
-    //                                 && other.accepting().contains(&t2_tostate)
-    //                             {
-    //                                 intersection.accepting_mut().insert(to_state);
-    //                             }
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     intersection
-    // }
     /// Complement of this NFA
     pub fn complement(mut self) -> Self {
         self = self.determinize_min().complete();
@@ -466,7 +471,7 @@ impl Nfa {
             .chain(once(self.start))
         {
             for ch in 0..=u8::MAX {
-                if self.table.transition(state, Some(ch)).is_empty() {
+                if self.table.transition(state, Some(ch)).count() == 0 {
                     self.table.insert(Transition {
                         from_state: state,
                         to_state: garbage_state,
@@ -742,9 +747,9 @@ impl Nfst {
                 for a in alphabet.iter() {
                     for b in alphabet.iter() {
                         let x_tsns = self.table.transition(x, *a);
-                        let y_tsns = other.table.transition(y, *b);
                         for x_tsn in x_tsns {
-                            for y_tsn in y_tsns.clone() {
+                            let y_tsns = other.table.transition(y, *b);
+                            for y_tsn in y_tsns {
                                 table.insert(Transition {
                                     from_state: ab2c(x, y),
                                     to_state: ab2c(x_tsn.1, y_tsn.1),
@@ -842,7 +847,6 @@ impl Nfst {
             table: new_table,
             accepting: accepting_states,
         }
-        .deepsilon()
     }
 
     /// Optional.
@@ -947,6 +951,25 @@ mod tests {
             .star()
             .subtract(&baa_containing)
             .determinize_min();
+        eprintln!("{}", nn.graphviz());
+        for s in nn.lang_iter_utf8().take(10) {
+            if s.is_ascii() {
+                eprintln!("{:?}", s);
+            }
+        }
+    }
+
+    #[test]
+    fn simple_nfst() {
+        let baa_containing = Nfa::all().concat(&"ba".into()).concat(&Nfa::all());
+        let nn = Nfa::from("a")
+            .union(&"b".into())
+            .star()
+            .subtract(&baa_containing)
+            .determinize_min();
+        let nn = Nfst::id_nfa(nn)
+            .compose(&Nfst::id_nfa(Nfa::from("aab")))
+            .image_nfa();
         eprintln!("{}", nn.graphviz());
         for s in nn.lang_iter_utf8().take(10) {
             if s.is_ascii() {

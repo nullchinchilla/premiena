@@ -18,6 +18,7 @@ categories:
       dž,
       s,
       š,
+      ś,
       x,
       z,
       ž,
@@ -31,13 +32,25 @@ categories:
   V: [a, e, i, o, u, ě, ę, ǫ, ь, ъ]
   X: [ь, ъ]
   S: [è, ò]
+  F: [ь, i, j]
+  R: [r, l]
 
-source: (CC*V)*
+source: (CC*V(R|))*
 
 rules:
+  # soften before front vowels
+  - t > ť / _F
+  - l > ľ / _F
+  - r > ř / _F
+  - n > ň / _F
+
+  # metathesis
+  - oR > Ra / C_C
+  - eR > Rě / C_C
+
   # fall of the yers
   # hack: * etc do not work properly in environments
-  - X > W / _#
+  - X > W / _%
   - X > W / _CCV
   - X > W / _CV
   - X > S / _CCW
@@ -51,3 +64,10 @@ rules:
   - ò > o / _
   - ę > e / _
   - ǫ > u / _
+
+  # Spelling
+  - ľ > l / _F
+  - ň > n / _F
+  - ť > t / _F
+  - ř > r / _F
+  - x > ch / _

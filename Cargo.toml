@@ -32,6 +32,7 @@ shellexpand = "2.1.0"
 thiserror = "1.0.26"
 ahash = "0.8.6"
 scopeguard = "1.2.0"
+either = "1.9.0"
 
 [profile.dev]
 opt-level=1

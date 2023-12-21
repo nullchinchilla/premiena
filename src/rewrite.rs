@@ -128,22 +128,18 @@ impl RewriteRule {
         let replace = if reverse { replace.inverse() } else { replace };
 
         move |input| {
-            Nfst::id_nfa(input)
-                .compose(&inner_replace)
+            let pre_replace = Nfst::id_nfa(
+                Nfst::id_nfa(input.determinize_min())
+                    .compose(&PROLOGUE)
+                    .image_nfa()
+                    .determinize_min(),
+            );
+            let post_replace = pre_replace.compose(&replace).image_nfa().determinize_min();
+
+            Nfst::id_nfa(post_replace)
+                // .compose(&PROLOGUE.clone().inverse())
                 .image_nfa()
                 .determinize_min()
-            // let pre_replace = Nfst::id_nfa(
-            //     Nfst::id_nfa(input.determinize_min())
-            //         .compose(&PROLOGUE)
-            //         .image_nfa()
-            //         .determinize_min(),
-            // );
-            // let post_replace = pre_replace.compose(&replace).image_nfa().determinize_min();
-
-            // Nfst::id_nfa(post_replace)
-            //     .compose(&PROLOGUE.clone().inverse())
-            //     .image_nfa()
-            //     .determinize_min()
         }
     }
 }
@@ -154,13 +150,15 @@ mod tests {
     #[test]
     fn simple_lenition() {
         let _ = env_logger::try_init();
-        let rr = RewriteRule::from_line("x > gz / e_a").unwrap();
+        let rr = RewriteRule::from_line("a > e / d(z|)_").unwrap();
         let rule = rr.transduce(false);
-        // eprintln!("{}", rule(Nfa::all()).graphviz());
-        for s in rule("x".into()).lang_iter_utf8() {
-            // if s.contains("h") {
-            eprintln!("{:?}", s)
-            // }
+        eprintln!("{}", rule(Nfa::all()).graphviz());
+        for s in rule(Nfa::from("adza"))
+            .determinize_min()
+            .lang_iter_utf8()
+            .take(10)
+        {
+            eprintln!("{s}")
         }
     }
 }

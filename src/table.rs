@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 use ahash::{AHashMap, AHashSet};
+use either::Either;
 use tap::Tap;
 
 /// A single transition.
@@ -101,21 +102,21 @@ impl Table {
         &self,
         state: u32,
         input: impl Into<Option<u8>>,
-    ) -> AHashSet<(Option<u8>, u32)> {
-        let input: Option<u8> = input.into();
-        let mut res = if let Some(val) = self.forwards.get(&state) {
-            if let Some(val) = val.get(&input) {
-                val.clone()
-            } else {
-                Default::default()
-            }
-        } else {
-            Default::default()
-        };
+    ) -> impl Iterator<Item = (Option<u8>, u32)> + '_ {
+        let input = input.into();
+
+        let iter = self
+            .forwards
+            .get(&state)
+            .and_then(|map| map.get(&input).map(|res| res.iter()))
+            .into_iter()
+            .flatten()
+            .copied();
         if input.is_none() {
-            res.insert((None, state));
+            Either::Left(iter.chain(std::iter::once((None, state))))
+        } else {
+            Either::Right(iter)
         }
-        res
     }
 
     /// Gets all the edges going out of one node

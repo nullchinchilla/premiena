@@ -55,7 +55,7 @@ impl NfaExt for Nfa {
 
     fn intro(self) -> Nfst {
         let s = Nfst::id_nfa(self);
-        Nfst::id_nfa(Nfa::sigma().concat(&Nfa::sigma()))
+        Nfst::id_nfa(Nfa::sigma())
             .union(&Nfst::id_nfa(Nfa::empty()).image_cross(&s).star())
             .star()
     }

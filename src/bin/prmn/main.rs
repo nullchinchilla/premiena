@@ -3,7 +3,7 @@ use premiena::{regex_to_nfa, Nfa, RewriteRule};
 use rayon::prelude::*;
 use scfile::ScFile;
 use std::{
-    io::{stdin, BufRead, BufReader},
+    io::{stdin, stdout, BufRead, BufReader, Write},
     path::PathBuf,
     time::Instant,
 };
@@ -31,8 +31,9 @@ fn main() -> anyhow::Result<()> {
         infile.rules.reverse();
     }
     let (source, rules) = infile.expand()?;
+    let start = Instant::now();
     let rules = rules
-        .iter()
+        .par_iter()
         .map(|line| {
             let start = Instant::now();
             let res = RewriteRule::from_line(line.trim())?.transduce(args.reverse);
@@ -40,16 +41,16 @@ fn main() -> anyhow::Result<()> {
             Ok(res)
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
-    log::debug!("rules compiled!");
+    log::debug!("rules compiled in {:?}!", start.elapsed());
     for line in BufReader::new(stdin()).lines() {
-        let line = format!("#{}#", line?);
+        let line = line?;
         let mut line = Nfa::from(line.as_str());
         for rule in rules.iter() {
             line = rule(line).determinize_min();
         }
 
         if args.reverse {
-            line = line.intersect(&regex_to_nfa(&format!("#{}#", source))?)
+            line = line.intersect(&regex_to_nfa(&source)?)
         }
 
         for res in line
@@ -57,9 +58,7 @@ fn main() -> anyhow::Result<()> {
             // .filter(|l| l.chars().all(|c| c.is_ascii_alphabetic()))
             .take(50)
         {
-            if res.starts_with('#') && res.ends_with('#') {
-                print!("{} ", res.trim_matches('#'))
-            }
+            print!("{} ", res);
         }
         println!();
     }
