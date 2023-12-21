@@ -80,7 +80,7 @@ impl RewriteRule {
         let right_context = right_context(&SIGMA, &self.right_ctx, &LEFT, &RIGHT).determinize_min();
         log::trace!("by LR contexts: {:?}", start.elapsed());
 
-        let context = left_context.intersect(&right_context);
+        let context = left_context.clone().intersect(&right_context);
         log::trace!("by unified context: {:?}", start.elapsed());
 
         let oblig = obligatory(&self.pre, &LI, &RIGHT)
@@ -137,7 +137,7 @@ impl RewriteRule {
             let post_replace = pre_replace.compose(&replace).image_nfa().determinize_min();
 
             Nfst::id_nfa(post_replace)
-                // .compose(&PROLOGUE.clone().inverse())
+                .compose(&PROLOGUE.clone().inverse())
                 .image_nfa()
                 .determinize_min()
         }
@@ -148,9 +148,9 @@ impl RewriteRule {
 mod tests {
     use super::*;
     #[test]
-    fn simple_lenition() {
+    fn simple_rewrite() {
         let _ = env_logger::try_init();
-        let rr = RewriteRule::from_line("a > e / d(z|)_").unwrap();
+        let rr = RewriteRule::from_line("a > e / d(z)_").unwrap();
         let rule = rr.transduce(false);
         eprintln!("{}", rule(Nfa::all()).graphviz());
         for s in rule(Nfa::from("adza"))
