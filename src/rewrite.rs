@@ -54,6 +54,7 @@ impl RewriteRule {
         // static NO_WINGS: Lazy<Nfa> =
         //     Lazy::new(|| Nfa::all().concat(&EMM_0).concat(&Nfa::all()).complement());
         static PROLOGUE: Lazy<Nfst> = Lazy::new(|| {
+            // EMM_0.clone().determinize_min().intro()
             let add_hash =
                 Nfst::image_cross(&Nfst::id_nfa(Nfa::empty()), &Nfst::id_nfa("%".into()));
 
@@ -121,13 +122,18 @@ impl RewriteRule {
             .deepsilon();
         log::trace!("by inner_replace: {:?}", start.elapsed());
 
-        let replace =
-            Nfst::id_nfa(context.intersect(&oblig).determinize_min()).compose(&inner_replace);
+        let replace = Nfst::id_nfa(context.clone().intersect(&oblig).determinize_min())
+            .compose(&inner_replace);
         log::trace!("by replace: {:?}", start.elapsed());
 
         let replace = if reverse { replace.inverse() } else { replace };
 
         move |input| {
+            // Nfst::id_nfa(input.determinize_min())
+            //     .compose(&PROLOGUE)
+            //     .compose(&Nfst::id_nfa(left_context.clone()))
+            //     .image_nfa()
+            //     .determinize_min()
             let pre_replace = Nfst::id_nfa(
                 Nfst::id_nfa(input.determinize_min())
                     .compose(&PROLOGUE)
@@ -150,15 +156,15 @@ mod tests {
     #[test]
     fn simple_rewrite() {
         let _ = env_logger::try_init();
-        let rr = RewriteRule::from_line("a > e / d(z)_").unwrap();
+        let rr = RewriteRule::from_line("a > e / d(z|)_").unwrap();
         let rule = rr.transduce(false);
-        eprintln!("{}", rule(Nfa::all()).graphviz());
-        for s in rule(Nfa::from("adza"))
+
+        for s in rule(Nfa::from("adzak"))
             .determinize_min()
             .lang_iter_utf8()
             .take(10)
         {
-            eprintln!("{s}")
+            eprintln!("{:?}", s)
         }
     }
 }

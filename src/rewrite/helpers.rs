@@ -101,14 +101,15 @@ pub fn left_context(sigma: &Nfa, lambda: &Nfa, left: &Nfa, right: &Nfa) -> Nfa {
             .concat(left)
             .star()
     } else {
+        let lambda_ignore = lambda
+            .clone()
+            .ignore(&left.clone().union(right).union(&Nfa::from("0")))
+            .determinize_min();
         pre_iff_suf(
-            &Nfa::all().concat(
-                &lambda
-                    .clone()
-                    .ignore(right)
-                    .determinize_min()
-                    .ignore(&"0".into()),
-            ),
+            &Nfa::all()
+                .clone()
+                .concat(&lambda_ignore)
+                .subtract(&Nfa::all().concat(left)),
             &left.clone().concat(&Nfa::all()),
         )
     }
@@ -141,12 +142,17 @@ pub fn right_context(sigma: &Nfa, rho: &Nfa, left: &Nfa, right: &Nfa) -> Nfa {
             .concat(&sigma.clone().ignore(left).ignore(&"0".into()))
             .star()
     } else {
+        let rho_ignore = rho
+            .clone()
+            .ignore(&left.clone().union(right).union(&Nfa::from("0")))
+            .determinize_min();
         pre_iff_suf(
-            &Nfa::all().concat(right),
-            &rho.clone()
-                .ignore(left)
-                .ignore(&"0".into())
-                .concat(&Nfa::all()),
+            &Nfa::all().clone().concat(right),
+            &rho_ignore
+                .clone()
+                .concat(&Nfa::all())
+                .subtract(&right.clone().concat(&Nfa::all())),
         )
+        .ignore(left)
     }
 }

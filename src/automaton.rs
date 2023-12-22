@@ -287,111 +287,34 @@ impl Nfa {
         closure
     }
 
-    // pub fn intersect(mut self, other: &Self) -> Self {
-    //     self = self.determinize_min();
-    //     let other = other.clone().determinize_min();
-    //     let mut new_table = Table::new();
-    //     let mut ab2c = new_ab2c();
-    //     for atrans in self.table.iter() {
-    //         for btrans in other.table.iter() {
-    //             if atrans.from_char == btrans.from_char {
-    //                 new_table.insert(Transition {
-    //                     from_state: ab2c(atrans.from_state, btrans.from_state),
-    //                     to_state: ab2c(atrans.to_state, btrans.to_state),
-    //                     from_char: atrans.from_char,
-    //                     to_char: atrans.from_char,
-    //                 })
-    //             }
-    //         }
-    //     }
-    //     let mut new_accepting = AHashSet::default();
-    //     for a_accept in self.accepting.iter() {
-    //         for b_accept in other.accepting.iter() {
-    //             new_accepting.insert(ab2c(*a_accept, *b_accept));
-    //         }
-    //     }
-    //     Self {
-    //         start: ab2c(self.start, other.start),
-    //         table: new_table,
-    //         accepting: new_accepting,
-    //     }
-    // }
-
-    /// Intersect with another NFA using product construction including epsilon transitions.
-    pub fn intersect(self, other: &Self) -> Self {
-        // Create an empty NFA for the intersection.
-        let mut intersection = Nfa::null();
-
-        // Create a mapping between state pairs and new state IDs.
+    pub fn intersect(mut self, other: &Self) -> Self {
+        self = self.deepsilon();
+        let other = other.clone().deepsilon();
+        let mut new_table = Table::new();
         let mut ab2c = new_ab2c();
-
-        // Initialize queue with the epsilon closure of the start states.
-        let mut queue = VecDeque::new();
-        let start_closure1 = self.epsilon_closure(*self.start());
-        let start_closure2 = other.epsilon_closure(*other.start());
-        for &s1 in &start_closure1 {
-            for &s2 in &start_closure2 {
-                let start_pair = (s1, s2);
-                let start_state = ab2c(s1, s2);
-
-                queue.push_back(start_pair);
-
-                // Set the start state of the intersection NFA.
-                intersection.start = start_state;
-
-                // Handle accepting states.
-                if self.accepting().contains(&s1) && other.accepting().contains(&s2) {
-                    intersection.accepting_mut().insert(start_state);
+        for atrans in self.table.iter() {
+            for btrans in other.table.iter() {
+                if atrans.from_char == btrans.from_char {
+                    new_table.insert(Transition {
+                        from_state: ab2c(atrans.from_state, btrans.from_state),
+                        to_state: ab2c(atrans.to_state, btrans.to_state),
+                        from_char: atrans.from_char,
+                        to_char: atrans.from_char,
+                    })
                 }
             }
         }
-
-        // Process queue.
-        let mut processed = AHashSet::new();
-        while let Some((s1, s2)) = queue.pop_front() {
-            let closure1 = self.epsilon_closure(s1);
-            let closure2 = other.epsilon_closure(s2);
-
-            for a in (0..=u8::MAX).map(Some).chain(once(None)) {
-                for &c1 in &closure1 {
-                    for &c2 in &closure2 {
-                        let transitions1 = self.table().transition(c1, a);
-
-                        for (_, t1_tostate) in transitions1 {
-                            let transitions2 = other.table().transition(c2, a);
-                            for (_, t2_tostate) in transitions2 {
-                                let pair = (t1_tostate, t2_tostate);
-
-                                // Get or create state ID for the pair.
-                                let to_state = ab2c(t1_tostate, t2_tostate);
-
-                                // Add transition to the intersection NFA.
-                                intersection.table_mut().insert(Transition {
-                                    from_state: ab2c(s1, s2),
-                                    to_state,
-                                    from_char: a,
-                                    to_char: a,
-                                });
-
-                                // Add to queue if not already processed.
-                                if processed.insert(to_state) {
-                                    queue.push_back(pair);
-                                }
-
-                                // Handle accepting states.
-                                if self.accepting().contains(&t1_tostate)
-                                    && other.accepting().contains(&t2_tostate)
-                                {
-                                    intersection.accepting_mut().insert(to_state);
-                                }
-                            }
-                        }
-                    }
-                }
+        let mut new_accepting = AHashSet::default();
+        for a_accept in self.accepting.iter() {
+            for b_accept in other.accepting.iter() {
+                new_accepting.insert(ab2c(*a_accept, *b_accept));
             }
         }
-
-        intersection
+        Self {
+            start: ab2c(self.start, other.start),
+            table: new_table,
+            accepting: new_accepting,
+        }
     }
 
     /// Complement of this NFA

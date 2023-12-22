@@ -49,14 +49,10 @@ rules:
   - eR > Rě / C_C
 
   # fall of the yers
-  # hack: * etc do not work properly in environments
   - X > W / _%
-  - X > W / _CCV
-  - X > W / _CV
-  - X > S / _CCW
-  - X > S / _CW
-  - X > W / _CCS
-  - X > W / _CS
+  - X > W / _CC*V
+  - X > S / _CC*W
+  - X > W / _CC*S
   - W > / _
 
   # Ližsky specific changes
