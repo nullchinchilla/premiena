@@ -1,0 +1,98 @@
+categories:
+  C:
+    [
+      p,
+      t,
+      k,
+      f,
+      s,
+      h,
+      b,
+      d,
+      g,
+      q,
+      x,
+      r,
+      l,
+      w,
+      y,
+      n,
+      m,
+      ñ,
+      j,
+      v,
+      š,
+      ž,
+      č,
+      z,
+      c,
+      "'",
+    ]
+  V: [a, e, i, o, u, ē, ō, ë]
+  M: [i, u]
+  XPREPAT: [t, k, d, g, l, m, n]
+  XPOSTPAT: [q, q, j, j, y, y, y]
+
+  XPREFLAT: [k, g, l, m, n, h]
+  XPOSTFLAT: [p, b, w, w, w, f]
+
+  XYER: [i, ë]
+  XNONYER: [a, u, ē, ō, o, e]
+  XWEAK: [è, à]
+  XSTRONG: [i, a]
+
+rules:
+  # some respelling
+  - ng > ñ / _
+  - zh > ž / _
+  - sh > š / _
+  - ch > č / _
+  - ui > uei / _
+  - un > uën / _
+  - iñ > iëñ / _
+  - ye > yie / _
+  - yang > iañ / _
+
+  # remove the problematic RRR sounds
+  - i > ë / (š|č|ž|s|z|c)_
+
+  # make /o/ /e/ /ë/ distinction phonemic
+  - e > ë / (%|C|')_(%|C|')
+  - ai > ē / (%|C|')_
+  - ei > e / (%|C|')(M|)_
+  - ao > ō / (%|C|')_
+  - ou > o / (%|C|')_
+  - añ > on / (%|C|')(u|)_
+  - ëñ > ën / _
+  - oñ > un / _
+
+  # remove the <i> medial in various ways
+  - iañ > an / _(%|C|')
+  - ian > en / _(%|C|')
+  - iao > ō / _
+  - ing > en / _
+  - ia > ē / (%|C|')_(%|C|')
+  - iu > io / _
+  - XPREPAT > XPOSTPAT / _(iV|ē)
+  - š > x / _
+  - ž > j / _
+  - č > q / _
+  - i > / (%|C|')_V
+
+  # remove the <w> medial
+  - uan > en / (j|q|x|y)_
+  - u > ui / (j|q|x|y)_(%|C|')
+  - ü > ui / _
+  - XPREFLATu > XPOSTFLAT / _V
+  - u >  / _V
+
+  # Havlik-style syncope
+  - XYER > XWEAK / _C*%
+  - XYER > XWEAK / _CC*V
+  - XYER > XSTRONG / _ CC*XWEAK
+  - XWEAK > / _(%|n)
+  # - XWEAK > XSTRONG / _
+
+  # get rid of the stupid <r> sound
+  - r > y / _V
+  - r > x / _

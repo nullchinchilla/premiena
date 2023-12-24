@@ -29,13 +29,15 @@ categories:
       v,
       j,
     ]
-  V: [a, e, i, o, u, ě, ę, ǫ, ь, ъ]
+  V: [a, e, i, o, u, ě, ę, ǫ, y, ь, ъ]
+  L: [a, e, i, o, u, ě, ę, ǫ, y]
   X: [ь, ъ]
   S: [è, ò]
-  F: [ь, i, j]
+  F: [ь, i, j, e]
   R: [r, l]
+  P: [p, t, k, b, d, g]
 
-source: (CC*V(R|))*
+source: (L|)(CC*V(R|))*
 
 rules:
   # soften before front vowels
@@ -48,9 +50,9 @@ rules:
   - oR > Ra / C_C
   - eR > Rě / C_C
 
-  # fall of the yers
+  # # fall of the yers
   - X > W / _%
-  - X > W / _CC*V
+  - X > W / _CC*L
   - X > S / _CC*W
   - X > W / _CC*S
   - W > / _
@@ -60,6 +62,10 @@ rules:
   - ò > o / _
   - ę > e / _
   - ǫ > u / _
+
+  # basilectal Ližsky changes
+  - y > i / _
+  - s > es / (%|C)_P
 
   # Spelling
   - ľ > l / _F

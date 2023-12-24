@@ -46,11 +46,13 @@ fn main() -> anyhow::Result<()> {
         let line = line?;
         let mut line = Nfa::from(line.as_str());
         for rule in rules.iter() {
-            line = rule(line).determinize_min();
+            line = rule(line);
         }
 
         if args.reverse {
-            line = line.intersect(&regex_to_nfa(&source)?)
+            if let Some(source) = source.as_ref() {
+                line = line.intersect(&regex_to_nfa(&source)?)
+            }
         }
 
         for res in line

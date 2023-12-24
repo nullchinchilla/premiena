@@ -1,11 +1,12 @@
-use std::fmt::Display;
+use std::collections::BTreeSet;
 
 use ahash::{AHashMap, AHashSet};
 use either::Either;
+
 use tap::Tap;
 
 /// A single transition.
-#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Transition {
     pub from_state: u32,
     pub to_state: u32,
@@ -19,7 +20,10 @@ pub struct Transition {
 pub struct Table {
     // state -> (char -> setof outchar, state)
     forwards: AHashMap<u32, AHashMap<Option<u8>, AHashSet<(Option<u8>, u32)>>>,
-    backwards: AHashMap<u32, AHashMap<Option<u8>, AHashSet<(Option<u8>, u32)>>>,
+
+    states: BTreeSet<u32>,
+
+    transitions: Vec<Transition>,
 }
 
 impl Table {
@@ -27,27 +31,29 @@ impl Table {
     pub fn new() -> Self {
         Self {
             forwards: AHashMap::default(),
-            backwards: AHashMap::default(),
+            states: BTreeSet::new(),
+
+            transitions: Vec::new(),
         }
     }
 
     /// All the states.
-    pub fn states(&self) -> AHashSet<u32> {
-        self.forwards
-            .keys()
-            .chain(self.backwards.keys())
-            .copied()
-            .collect()
+    pub fn states(&self) -> impl Iterator<Item = u32> + '_ {
+        self.states.iter().copied()
+    }
+
+    /// State count.
+    pub fn state_count(&self) -> usize {
+        self.states.len()
     }
 
     /// Next free stateid
     pub fn next_free_stateid(&self) -> u32 {
-        self.states().into_iter().max().unwrap_or_default() + 1
+        self.states.last().copied().unwrap_or_default() + 1
     }
 
     /// Double-epsilon closure
     pub fn dubeps_closure(&self, start: u32) -> AHashSet<u32> {
-        // self.edge_closure(start, |t| t.from_char.is_none() && t.to_char.is_none())
         let mut group = AHashSet::default();
         let mut dfs_stack = vec![start];
         while let Some(top) = dfs_stack.pop() {
@@ -65,36 +71,20 @@ impl Table {
         group
     }
 
-    /// Closure, given a particular predicate
-    fn edge_closure(&self, start: u32, pred: impl Fn(&Transition) -> bool) -> AHashSet<u32> {
-        let mut group = AHashSet::default();
-        let mut dfs_stack = vec![start];
-        while let Some(top) = dfs_stack.pop() {
-            group.insert(top);
-            let neighs = self.outgoing_edges(top);
-            for neigh in neighs.into_iter().filter(&pred) {
-                if group.insert(neigh.to_state) {
-                    dfs_stack.push(neigh.to_state);
-                }
-            }
-        }
-        group
-    }
-
     /// Inserts one transition.
     pub fn insert(&mut self, transition: Transition) {
-        self.forwards
+        self.states.insert(transition.from_state);
+        self.states.insert(transition.to_state);
+        let new_value = self
+            .forwards
             .entry(transition.from_state)
             .or_default()
             .entry(transition.from_char)
             .or_default()
             .insert((transition.to_char, transition.to_state));
-        self.backwards
-            .entry(transition.to_state)
-            .or_default()
-            .entry(transition.to_char)
-            .or_default()
-            .insert((transition.from_char, transition.from_state));
+        if new_value {
+            self.transitions.push(transition)
+        }
     }
 
     /// The basic transition function.
@@ -133,49 +123,19 @@ impl Table {
         })
     }
 
-    /// Gets all the edges going into one node
-    pub fn incoming_edges(&self, state: u32) -> Vec<Transition> {
-        if let Some(val) = self.backwards.get(&state) {
-            val.iter()
-                .flat_map(|p| {
-                    p.1.iter().map(|q| Transition {
-                        to_state: state,
-                        from_state: q.1,
-                        to_char: *p.0,
-                        from_char: q.0,
-                    })
-                })
-                .collect()
-        } else {
-            vec![]
-        }
-    }
-
     /// Iterates over all the transitions.
     pub fn iter(&self) -> impl Iterator<Item = Transition> + '_ {
-        self.forwards
-            .iter()
-            .flat_map(|(state, tab)| {
-                tab.iter().map(|(ch, nstate)| {
-                    nstate.iter().map(|(nch, nstate)| Transition {
-                        from_state: *state,
-                        to_state: *nstate,
-                        from_char: *ch,
-                        to_char: *nch,
-                    })
-                })
-            })
-            .flatten()
-    }
-
-    /// Retains only  the things fitting the predicate.
-    pub fn retain(&mut self, f: impl Fn(&Transition) -> bool) {
-        *self = self.iter().filter(f).collect()
+        self.transitions.iter().copied()
     }
 
     /// Flips direction of the table.
-    pub fn flip(&mut self) {
-        std::mem::swap(&mut self.backwards, &mut self.forwards);
+    pub fn flip(&self) -> Self {
+        Table::from_iter(self.iter().map(|trans| Transition {
+            from_state: trans.to_state,
+            to_state: trans.from_state,
+            from_char: trans.to_char,
+            to_char: trans.from_char,
+        }))
     }
 }
 

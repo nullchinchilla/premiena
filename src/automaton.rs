@@ -127,9 +127,6 @@ pub trait Automaton: Sized {
 
     /// Remove all double-epsilon transitions.
     fn deepsilon(mut self) -> Self {
-        // let start = Instant::now();
-        // scopeguard::defer!(log::debug!("deepsilon took {:?}", start.elapsed()));
-
         let mut set_to_num = new_set2num();
         let new_start = set_to_num(
             self.table()
@@ -369,7 +366,7 @@ impl Nfa {
 
     /// Reverses the strings in this NFA.
     pub fn reverse(mut self) -> Self {
-        self.table.flip();
+        self.table = self.table.flip();
         let new_start = self.table.next_free_stateid();
         for old_accept in self.accepting.iter().copied() {
             self.table.insert(Transition {
@@ -387,7 +384,7 @@ impl Nfa {
     /// Make complete.
     pub fn complete(mut self) -> Self {
         let garbage_state = self.table.next_free_stateid();
-        let states = self.table.states();
+        let states = self.table.states().collect_vec();
         for state in states
             .into_iter()
             .chain(once(garbage_state))
@@ -410,7 +407,7 @@ impl Nfa {
     /// Convert into a DFA.
     pub fn determinize(mut self) -> Self {
         let start = Instant::now();
-        let pre_det = self.table.states().len();
+        let pre_det = self.table.state_count();
         // first remove epsilons. this makes our life easier
         self = self.deepsilon();
         // then we use the powerset construction
@@ -469,7 +466,7 @@ impl Nfa {
             log::warn!(
                 "determinize {} => {} took {} steps ({:?})",
                 pre_det,
-                new_table.states().len(),
+                new_table.state_count(),
                 step_ctr,
                 start.elapsed()
             );
@@ -582,23 +579,20 @@ impl Nfst {
     pub fn image_cross(&self, other: &Self) -> Self {
         let mut ab2c = new_ab2c();
         let mut table = Table::new();
-        let alphabet: AHashSet<Option<u8>> = (0..=u8::MAX)
-            .map(Some)
-            .chain(std::iter::once(None))
-            .collect();
+        let alphabet = || (0..=u8::MAX).map(Some).chain(std::iter::once(None));
         for x in self.table.states() {
             for y in other.table.states() {
-                for a in alphabet.iter() {
-                    for b in alphabet.iter() {
-                        let x_tsns = self.table.transition(x, *a);
+                for a in alphabet() {
+                    for b in alphabet() {
+                        let x_tsns = self.table.transition(x, a);
                         for x_tsn in x_tsns {
-                            let y_tsns = other.table.transition(y, *b);
+                            let y_tsns = other.table.transition(y, b);
                             for y_tsn in y_tsns {
                                 table.insert(Transition {
                                     from_state: ab2c(x, y),
                                     to_state: ab2c(x_tsn.1, y_tsn.1),
-                                    from_char: *a,
-                                    to_char: *b,
+                                    from_char: a,
+                                    to_char: b,
                                 });
                             }
                         }
@@ -679,9 +673,9 @@ impl Nfst {
         if start.elapsed().as_secs_f64() > 1.0 {
             log::warn!(
                 "compose of {}x{} => {} took {} steps ({:?})",
-                self.table.states().len(),
-                other.table.states().len(),
-                new_table.states().len(),
+                self.table.state_count(),
+                other.table.state_count(),
+                new_table.state_count(),
                 counter,
                 start.elapsed()
             );

@@ -69,11 +69,10 @@ impl RewriteRule {
         let obligatory = |phi: &Nfa, left: &Nfa, right: &Nfa| {
             Nfa::all()
                 .concat(left)
-                .concat(&phi.clone().ignore(&EMM_0).determinize())
+                .concat(&phi.clone().ignore(&EMM_0))
                 .concat(right)
                 .concat(&Nfa::all())
                 .complement()
-                .determinize_min()
         };
         log::trace!("by obligatory: {:?}", start.elapsed());
 
@@ -130,10 +129,10 @@ impl RewriteRule {
 
         move |input| {
             // Nfst::id_nfa(input.determinize_min())
-            //     .compose(&PROLOGUE)
-            //     .compose(&Nfst::id_nfa(left_context.clone()))
-            //     .image_nfa()
-            //     .determinize_min()
+            // .compose(&PROLOGUE)
+            // .compose(&Nfst::id_nfa(right_context.clone()))
+            // .image_nfa()
+            // .determinize_min()
             let pre_replace = Nfst::id_nfa(
                 Nfst::id_nfa(input.determinize_min())
                     .compose(&PROLOGUE)
@@ -156,13 +155,13 @@ mod tests {
     #[test]
     fn simple_rewrite() {
         let _ = env_logger::try_init();
-        let rr = RewriteRule::from_line("a > e / d(z|)_").unwrap();
+        let rr = RewriteRule::from_line("X > W / _t(t|)(a|o)").unwrap();
         let rule = rr.transduce(false);
 
-        for s in rule(Nfa::from("adzak"))
+        for s in rule(Nfa::from("tXtotXtXtta"))
             .determinize_min()
             .lang_iter_utf8()
-            .take(10)
+            .take(100)
         {
             eprintln!("{:?}", s)
         }
