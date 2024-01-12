@@ -60,5 +60,5 @@ For every line, the sound changes are run in reverse, and _all_ the possible anc
 **Note**: The `source` field in the YAML specifies a regex that matches phonotactically legal words in the parent language. Otherwise, many unreasonable words would be generated. For example, without the `source` field, reversing `chōchō` through `demo_jp.yaml` would lead to this less useful list:
 
 ```
-teuteu tyōteu tyauteu tyouteu teputeu teuchō teuchou teuchau teutepu teutewu teutyō teutyou teutyau tewuteu chōteu chauteu chouteu tyōchō tyōchou tyōchau tyōtepu tyōtewu tyōtyō tyōtyou tyōtyau tyaputeu tyauchō tyauchou tyauchau tyautepu tyautewu tyautyō tyautyou tyautyau tyawuteu tyoputeu tyouchō tyouchou tyouchau tyoutepu tyoutewu tyoutyō tyoutyou tyoutyau tyowuteu tepuchō tepuchou tepuchau teputepu teputewu
+teuteu tyōteu tyauteu tyouteu teputeu teuchō teuchou teuchau teyesutepu teutewu teutyō teutyou teutyau tewuteu chōteu chauteu chouteu tyōchō tyōchou tyōchau tyōtepu tyōtewu tyōtyō tyōtyou tyōtyau tyaputeu tyauchō tyauchou tyauchau tyautepu tyautewu tyautyō tyautyou tyautyau tyawuteu tyoputeu tyouchō tyouchou tyouchau tyoutepu tyoutewu tyoutyō tyoutyou tyoutyau tyowuteu tepuchō tepuchou tepuchau teputepu teputewu
 ```
