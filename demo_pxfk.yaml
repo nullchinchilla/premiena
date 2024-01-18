@@ -27,9 +27,12 @@ categories:
       z,
       c,
       "'",
+      þ,
+      ð,
     ]
-  V: [a, e, i, o, u, ē, ō, ë]
+  V: [a, e, i, o, u, ē, ō, ë, ī, ū, ï, 1]
   M: [i, u]
+  XT: [n, t, d, z, c]
   XPREPAT: [t, k, d, g, l, m, n]
   XPOSTPAT: [q, q, j, j, y, y, y]
 
@@ -91,21 +94,33 @@ rules:
   - č > q / _
   - i > / (%|C|')_V
 
-  # # Havlik-style syncope
-  # - XYER > XWEAK / _C*%
-  # - XYER > XWEAK / _CC*V
-  # - XYER > XSTRONG / _ CC*XWEAK
-  # - XWEAK > / _(%|n)
-  # - XWEAK > / VC_
-  # - XWEAK > XSTRONG / _
-
   # foot-based syncope
-  - XYER > / %(C*VC*V)*(C*VC*)_
-  - XYER > / _%
+  - XYER > 1 / %(C*VC*V)*(C*VC*)_
+  - XYER > 1 / V(C*)_%
+  - 1 > / _
   - ë > a / _
+  - y > i / C_(C|%)
+  - y > / _i
+  - n > un / C_(C|%)
 
-  # get rid of the stupid <r> sound
-  - r > x / _
+  # # get rid of the stupid <r> sound
+  - r > y / _
 
-  # spelling
-  - n > ṅ / C_(%|C)
+  # rhotacism:
+  # - post-tonic and post-nasal voiced affricates become r
+  # - elsewhere, only postalveolar voiced affricates become r after vowels
+  # - then, j > z and q > c, pushing z to ð and c to þ. there is no more postalveolars.
+  - (j|z) > r / ((%C*V)|n)_
+  - j > r / V_
+  - z > ð / _
+  - c > þ / _
+  - ð > d / %_
+  - j > z / _
+  - q > c / _
+
+  # there is now more c than s. this sounds kinda stupid.
+  - c > ts / V_V
+  - c > s / _
+
+  # assimilation
+  - (n|l) > r / _r
