@@ -107,11 +107,9 @@ rules:
   - r > y / _
 
   # rhotacism:
-  # - post-tonic and post-nasal voiced affricates become r
-  # - elsewhere, only postalveolar voiced affricates become r after vowels
+  # - j becomes r intervocalically
   # - then, j > z and q > c, pushing z to ð and c to þ. there is no more postalveolars.
-  - (j|z) > r / ((%C*V)|n)_
-  - j > r / V_
+  - j > r / V_V
   - z > ð / _
   - c > þ / _
   - ð > d / %_
@@ -124,3 +122,5 @@ rules:
 
   # assimilation
   - (n|l) > r / _r
+  - ds > z / _
+  - dz > z / _
