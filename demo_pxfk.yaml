@@ -106,17 +106,17 @@ rules:
   # # get rid of the stupid <r> sound
   - r > y / _
 
-  # rhotacism:
-  # - j becomes r intervocalically
+  # great consonant shift:
+  # - j becomes r
   # - then, j > z and q > c, pushing z to ð and c to þ. there is no more postalveolars.
-  - j > r / V_V
+  - j > r / _
   - z > ð / _
   - c > þ / _
   - ð > d / %_
   - j > z / _
   - q > c / _
 
-  # there is now more c than s. this sounds kinda stupid.
+  # remove c
   - c > ts / V_V
   - c > s / _
 
@@ -124,3 +124,11 @@ rules:
   - (n|l) > r / _r
   - ds > z / _
   - dz > z / _
+
+  # # h-dropping and x-backing
+  # - h > / _
+  # - x > h / _
+
+  # # some vowel shifting and spelling
+  # - ē > æ / _
+  # - ō > o / _
