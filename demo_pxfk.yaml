@@ -59,6 +59,11 @@ rules:
   - po > puo / _
   - bo > buo / _
   - wo > wë / _
+  - jia > ja / _
+  - xia > xa / _
+
+  # "rendaku"
+  - C' > CC / _
 
   # remove the problematic RRR sounds
   - i > ë / (š|č|ž|s|z|c)_
@@ -69,11 +74,12 @@ rules:
   - ei > e / (%|C|')(M|)_
   - ao > ō / (%|C|')_
   - ou > o / (%|C|')_
-  - añ > on / (%|C|')(u|)_
+  - añ > on / (%|C|')(u|i)_
   - ëñ > ën / _
   - oñ > un / _
 
   # remove the <w> medial
+  - yue > we / _
   - uan > en / (j|q|x|y)_
   - u > ui / (j|q|x|y)_(%|C|')
   - ü > ui / _
@@ -81,7 +87,6 @@ rules:
   - u >  / _V
 
   # remove the <i> medial in various ways
-  - iañ > an / _(%|C|')
   - ian > en / _(%|C|')
   - iao > ō / _
   - ing > en / _
@@ -94,14 +99,17 @@ rules:
   - č > q / _
   - i > / (%|C|')_V
 
-  # foot-based syncope
-  - XYER > 1 / %(C*VC*V)*(C*VC*)_
-  - XYER > 1 / V(C*)_%
+  # foot-based syncope of all schwas, and all high vowels before voiceless sounds or affricates
+  - ë > 1 / %(C*VC*V)*(C*VC*)_
+  - (i|u) > 1 / %(C*VC*V)*(C*VC*)_(p|t|k|f|s|h|q|x)
   - 1 > / _
-  - ë > a / _
   - y > i / C_(C|%)
   - y > / _i
   - n > un / C_(C|%)
+
+  # remove final schwa
+  - ë > / _%
+  - ë > a / _
 
   # # get rid of the stupid <r> sound
   - r > y / _
@@ -109,26 +117,39 @@ rules:
   # great consonant shift:
   # - j becomes r
   # - then, j > z and q > c, pushing z to ð and c to þ. there is no more postalveolars.
+  - j > s / n_
   - j > r / _
   - z > ð / _
   - c > þ / _
-  - ð > d / %_
-  - j > z / _
-  - q > c / _
+
+  - r > n / %_
 
   # remove c
-  - c > ts / V_V
-  - c > s / _
+  - q > ts / V_V
+  - q > s / _
 
   # assimilation
   - (n|l) > r / _r
   - ds > z / _
   - dz > z / _
 
-  # # h-dropping and x-backing
-  # - h > / _
-  # - x > h / _
+  # generate falling diphthongs by removing g
+  - g > y / V_V
+  - g > i / _
 
-  # # some vowel shifting and spelling
-  # - ē > æ / _
-  # - ō > o / _
+  # non-initial vowel shift
+  - o > ō / _n(C|%)
+  - o > u / VC*_
+  - ō > o / VC*_
+  - e > ē / _n(C|%)
+  - e > i / VC*_
+  - ē > e / VC*_
+
+  # a different vowel shift for the first vowel
+  - e > ie / %C*_C
+  - ē > e / %C*_
+  - o > uo / %C*_C
+  - ō > o / %C*_
+
+  # spelling changes
+  - w > v / _
